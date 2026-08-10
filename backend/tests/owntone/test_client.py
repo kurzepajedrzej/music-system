@@ -33,8 +33,18 @@ async def test_put_succeeds_on_2xx():
     await owntone.player_command("play")  # must not raise
 
 
+def _reset_album_artwork_cache(monkeypatch):
+    # _album_artwork_cache and _last_forced_refresh_at are module-level
+    # globals shared across the whole test session — reset them so each
+    # test's respx mocks are actually exercised instead of being silently
+    # answered from another test's stale cached data.
+    monkeypatch.setattr(owntone, "_album_artwork_cache", None)
+    monkeypatch.setattr(owntone, "_last_forced_refresh_at", 0.0)
+
+
 @respx.mock
-async def test_resolve_album_artwork_path_uses_artwork_url_field_only():
+async def test_resolve_album_artwork_path_uses_artwork_url_field_only(monkeypatch):
+    _reset_album_artwork_cache(monkeypatch)
     respx.get(f"{config.OWNTONE_URL}/api/library/albums?offset=0&limit=1000").mock(
         return_value=httpx.Response(
             200,
@@ -46,12 +56,50 @@ async def test_resolve_album_artwork_path_uses_artwork_url_field_only():
 
 
 @respx.mock
-async def test_resolve_album_artwork_path_returns_none_for_unknown_id():
+async def test_resolve_album_artwork_path_returns_none_for_unknown_id(monkeypatch):
+    _reset_album_artwork_cache(monkeypatch)
     respx.get(f"{config.OWNTONE_URL}/api/library/albums?offset=0&limit=1000").mock(
         return_value=httpx.Response(200, json={"total": 0, "items": []})
     )
     path = await owntone.resolve_album_artwork_path("nope")
     assert path is None
+
+
+@respx.mock
+async def test_resolve_album_artwork_path_rejects_malformed_artwork_url(monkeypatch):
+    # lstrip("./") is cosmetic, not a security boundary. If OwnTone itself
+    # ever published a malformed artwork_url (misconfigured, compromised, or
+    # an API shape we didn't anticipate), resolve_album_artwork_path must
+    # refuse to hand back anything that isn't one of the documented safe
+    # shapes ("artwork/group/<digits>" or "artwork/item/<digits>") — not
+    # proxy an arbitrary internal OwnTone path to an unauthenticated caller.
+    _reset_album_artwork_cache(monkeypatch)
+    respx.get(f"{config.OWNTONE_URL}/api/library/albums?offset=0&limit=1000").mock(
+        return_value=httpx.Response(
+            200,
+            json={"total": 1, "items": [{"id": "99", "artwork_url": "/../../api/config"}]},
+        )
+    )
+    path = await owntone.resolve_album_artwork_path("99")
+    assert path is None
+
+
+@respx.mock
+async def test_resolve_album_artwork_path_rate_limits_forced_refresh_on_repeated_miss(monkeypatch):
+    # A miss forces one full paginated library refetch so a genuinely new
+    # album resolves promptly. Repeated misses against the same (possibly
+    # nonexistent) id — reachable via unauthenticated client input to the
+    # artwork router — must not each force their own full refetch.
+    _reset_album_artwork_cache(monkeypatch)
+    route = respx.get(f"{config.OWNTONE_URL}/api/library/albums?offset=0&limit=1000").mock(
+        return_value=httpx.Response(200, json={"total": 0, "items": []})
+    )
+    for _ in range(5):
+        assert await owntone.resolve_album_artwork_path("nonexistent") is None
+    # One request for the initial (empty) cache fill, one forced refresh
+    # from the first miss — the remaining four misses land inside the
+    # rate-limit window and must not trigger any more.
+    assert route.call_count == 2
 
 
 @respx.mock

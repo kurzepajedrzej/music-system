@@ -1,3 +1,4 @@
+import re
 import time
 from urllib.parse import urlparse
 
@@ -135,11 +136,30 @@ async def get_artwork(path: str) -> httpx.Response:
 
 
 def _normalize_artwork_path(artwork_url: str) -> str:
+    # NOTE: this is cosmetic (strips a leading "./" or "/"), not a security
+    # boundary — it must never be relied on to neutralize a malformed path.
+    # The actual safety check is _SAFE_ARTWORK_PATH below, applied at
+    # resolve time.
     return artwork_url.lstrip("./")
 
 
+# The only path shapes OwnTone is documented to publish in an album's
+# artwork_url field. If OwnTone ever returned something else (misconfigured,
+# compromised, or just a future API change we haven't accounted for), we must
+# refuse to forward it rather than proxy an arbitrary internal OwnTone path
+# back to an unauthenticated caller.
+_SAFE_ARTWORK_PATH = re.compile(r"^artwork/(group|item)/\d+$")
+
 _album_artwork_cache: dict | None = None
 _ALBUM_ARTWORK_TTL_S = 60.0
+
+# A miss forces a full paginated library refetch (see below) so a genuinely
+# new album resolves promptly. But repeated misses against the same
+# nonexistent id (unauthenticated, client-triggerable) must not be able to
+# force unlimited full-library refetches against OwnTone — so forced
+# refreshes are rate-limited independently of the normal cache TTL.
+_last_forced_refresh_at: float = 0.0
+_FORCED_REFRESH_MIN_INTERVAL_S = 5.0
 
 
 async def _album_artwork_paths() -> dict[str, str]:
@@ -157,12 +177,21 @@ async def _album_artwork_paths() -> dict[str, str]:
 
 
 async def resolve_album_artwork_path(album_id: str) -> str | None:
-    global _album_artwork_cache
+    global _album_artwork_cache, _last_forced_refresh_at
     paths = await _album_artwork_paths()
     if album_id not in paths:
-        _album_artwork_cache = None  # album may post-date the cache — refresh once
-        paths = await _album_artwork_paths()
-    return paths.get(album_id)
+        now = time.monotonic()
+        if now - _last_forced_refresh_at >= _FORCED_REFRESH_MIN_INTERVAL_S:
+            _last_forced_refresh_at = now
+            _album_artwork_cache = None  # album may post-date the cache — refresh once
+            paths = await _album_artwork_paths()
+
+    path = paths.get(album_id)
+    if path and not _SAFE_ARTWORK_PATH.match(path):
+        # OwnTone published something we don't recognize as a safe artwork
+        # path — refuse to forward it rather than trust it blindly.
+        return None
+    return path
 
 
 # ── WebSocket URL discovery ─────────────────────────────────────────────────
