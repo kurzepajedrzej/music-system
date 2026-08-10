@@ -1,0 +1,186 @@
+import asyncio
+import logging
+from typing import Callable
+
+import serial
+
+log = logging.getLogger(__name__)
+
+STX = b"\x02"
+ETX = b"\x03"
+DC1 = b"\x11"
+DC2 = 0x12
+
+
+def _rc(code: str) -> bytes:
+    return STX + b"0" + code.encode("ascii") + ETX
+
+
+class CDC600Commands:
+    PLAY = _rc("7902")
+    PAUSE = _rc("7955")
+    STOP = _rc("7956")
+    NEXT_TRACK = _rc("7907")
+    PREV_TRACK = _rc("7904")
+    STATUS = STX + b"41000" + ETX
+
+
+_STATUS_CODES = {"10": "playing", "11": "paused", "0E": "stopped", "09": "no_disc", "02": "no_disc"}
+
+
+def _parse_state(raw: bytes) -> str | None:
+    if not raw:
+        return None
+    try:
+        payload = raw[1:-1].decode("ascii", errors="ignore").upper()
+        for code in ("11", "09", "02", "0E", "10"):
+            if code in payload:
+                return _STATUS_CODES[code]
+    except Exception:
+        pass
+    return None
+
+
+class SerialController:
+    """Async-compatible RS-232C controller for the Yamaha CDC-600.
+
+    Every access to `self._conn` — from `_handshake`, `_send`, and
+    `_query_status_sync` — happens under `self._port_lock`, so the 2s
+    background poller and an in-flight command can never write/read the
+    shared, non-thread-safe pyserial connection at the same time.
+    """
+
+    def __init__(self, port: str = "/dev/ttyUSB0", baud: int = 9600) -> None:
+        self._port = port
+        self._baud = baud
+        self._conn: serial.Serial | None = None
+        self._port_lock = asyncio.Lock()
+
+        self._state: str = "stopped"
+        self._disc_present: bool = True
+
+        self._listeners: list[Callable] = []
+        self._poll_task: asyncio.Task | None = None
+
+    def connect(self) -> None:
+        self._conn = serial.Serial(
+            port=self._port,
+            baudrate=self._baud,
+            bytesize=serial.EIGHTBITS,
+            parity=serial.PARITY_NONE,
+            stopbits=serial.STOPBITS_ONE,
+            timeout=1,
+        )
+        self._handshake()
+        self._poll_task = asyncio.create_task(self._poll_loop())
+
+    def disconnect(self) -> None:
+        if self._poll_task and not self._poll_task.done():
+            self._poll_task.cancel()
+        if self._conn and self._conn.is_open:
+            self._conn.close()
+
+    def _handshake(self) -> None:
+        ready = DC1 + b"000" + ETX
+        for attempt in range(1, 6):
+            self._conn.write(ready)
+            resp = self._read_until_etx()
+            if resp and resp[0] == DC2:
+                model = resp[1:6].decode("ascii", errors="replace")
+                log.info("CDC-600 handshake OK — model ID: %s", model)
+                return
+            log.debug("Handshake attempt %d: no valid Configuration reply", attempt)
+        log.warning("CDC-600 handshake failed after 5 attempts — commands will be sent anyway")
+
+    def _read_until_etx(self) -> bytes:
+        buf = bytearray()
+        while True:
+            b = self._conn.read(1)
+            if not b:
+                break
+            buf.extend(b)
+            if b == b"\x03":
+                break
+        return bytes(buf)
+
+    def _send(self, command: bytes) -> None:
+        if not self._conn or not self._conn.is_open:
+            raise RuntimeError("Serial port not connected")
+        self._conn.write(command)
+
+    def _query_status_sync(self) -> str | None:
+        try:
+            self._send(CDC600Commands.STATUS)
+            raw = self._read_until_etx()
+            return _parse_state(raw)
+        except Exception as e:
+            log.debug("Status query error: %s", e)
+            return None
+
+    def subscribe(self, cb: Callable) -> None:
+        self._listeners.append(cb)
+
+    def unsubscribe(self, cb: Callable) -> None:
+        self._listeners.remove(cb)
+
+    async def _notify(self) -> None:
+        st = self.status()
+        for cb in list(self._listeners):
+            await cb(st)
+
+    async def _poll_loop(self) -> None:
+        while True:
+            await asyncio.sleep(2)
+            try:
+                async with self._port_lock:
+                    new_state = await asyncio.to_thread(self._query_status_sync)
+                if new_state is None:
+                    continue
+                prev_disc = self._disc_present
+                new_disc = new_state != "no_disc"
+                if new_state != self._state or new_disc != prev_disc:
+                    self._state = new_state
+                    self._disc_present = new_disc
+                    await self._notify()
+            except asyncio.CancelledError:
+                return
+            except Exception as e:
+                log.debug("Poll loop error: %s", e)
+
+    def status(self) -> dict:
+        return {
+            "state": self._state,
+            "disc_present": self._disc_present,
+            "track": 1,
+            "total_tracks": 0,
+            "elapsed_seconds": 0,
+            "track_duration_seconds": 0,
+        }
+
+    async def _send_locked(self, command: bytes) -> None:
+        async with self._port_lock:
+            await asyncio.to_thread(self._send, command)
+
+    async def play(self) -> None:
+        await self._send_locked(CDC600Commands.PLAY)
+        self._state = "playing"
+        self._disc_present = True
+        await self._notify()
+
+    async def pause(self) -> None:
+        await self._send_locked(CDC600Commands.PAUSE)
+        self._state = "paused"
+        await self._notify()
+
+    async def stop(self) -> None:
+        await self._send_locked(CDC600Commands.STOP)
+        self._state = "stopped"
+        await self._notify()
+
+    async def next_track(self) -> None:
+        await self._send_locked(CDC600Commands.NEXT_TRACK)
+        await self._notify()
+
+    async def prev_track(self) -> None:
+        await self._send_locked(CDC600Commands.PREV_TRACK)
+        await self._notify()
