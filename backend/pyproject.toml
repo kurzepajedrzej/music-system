@@ -1,0 +1,21 @@
+[project]
+name = "music-system-backend"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.115.12",
+    "uvicorn[standard]>=0.34.0",
+    "httpx>=0.28.0",
+    "websockets>=13.0",
+    "pyserial>=3.5",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "respx>=0.22.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
