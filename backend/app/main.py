@@ -1,8 +1,8 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.routers import player
 
 app = FastAPI(title="music-system-backend")
-
-
-@app.get("/api/health")
-async def health_stub():
-    return {"status": "scaffold"}
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.include_router(player.router)
