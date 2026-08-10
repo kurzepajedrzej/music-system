@@ -5,6 +5,8 @@
 	import { sendCommand } from '$lib/api/cdcontrol.js';
 	import { playerCommand, seekTo, artworkUrl, removeQueueItem, playQueueItem, getState, switchSource } from '$lib/api/owntone.js';
 	import { connectWs } from '$lib/api/ws.js';
+	import { switchSource as switchSourceLogic } from '$lib/logic/source.js';
+	import { computeSeekTarget } from '$lib/logic/seek.js';
 	import Library      from '$lib/components/Library.svelte';
 	import AirPlayZones from '$lib/components/AirPlayZones.svelte';
 	import Queue        from '$lib/components/Queue.svelte';
@@ -23,13 +25,16 @@
 	$effect(() => { if (browser) localStorage.setItem('music-source', source); });
 
 	let switching = $state(false);
-	async function doSwitchSource() {
-		if (switching) return;
-		const target = source === 'cd' ? 'library' : 'cd';
+	async function doSwitchSource(target) {
+		// No-op if already on the target source — /api/source/cd is not
+		// idempotent (it stops and restarts the pipe), so re-issuing it while
+		// already on CD would audibly interrupt live playback.
+		if (switching || target === source) return;
 		switching = true;
 		try {
-			await switchSource(target);
-			source = target;
+			source = await switchSourceLogic({ current: source, target, apiSwitchSource: switchSource });
+		} catch {
+			// switch failed — leave `source` unchanged, matching pre-switch state
 		} finally {
 			switching = false;
 		}
@@ -77,9 +82,17 @@
 		source === 'cd' ? cdStatus.state === 'playing' : player?.state === 'play'
 	);
 
+	let cdBusy = $state(false);
+
 	async function togglePlay() {
 		if (source === 'cd') {
-			sendCommand(cdStatus.state === 'playing' ? 'pause' : 'play');
+			if (cdBusy) return;
+			cdBusy = true;
+			try {
+				await sendCommand(cdStatus.state === 'playing' ? 'pause' : 'play');
+			} finally {
+				cdBusy = false;
+			}
 		} else {
 			if (libBusy) return;
 			libBusy = true;
@@ -93,8 +106,15 @@
 		}
 	}
 	async function skipNext() {
-		if (source === 'cd') sendCommand('next');
-		else {
+		if (source === 'cd') {
+			if (cdBusy) return;
+			cdBusy = true;
+			try {
+				await sendCommand('next');
+			} finally {
+				cdBusy = false;
+			}
+		} else {
 			player     = { ...(player ?? {}), state: 'play' };
 			anchorPos  = 0;
 			anchorTime = Date.now();
@@ -102,8 +122,15 @@
 		}
 	}
 	async function skipPrev() {
-		if (source === 'cd') sendCommand('prev');
-		else {
+		if (source === 'cd') {
+			if (cdBusy) return;
+			cdBusy = true;
+			try {
+				await sendCommand('prev');
+			} finally {
+				cdBusy = false;
+			}
+		} else {
 			player     = { ...(player ?? {}), state: 'play' };
 			anchorPos  = 0;
 			anchorTime = Date.now();
@@ -173,12 +200,15 @@
 	async function onProgressPointerUp(e) {
 		if (!seeking) return;
 		if (!player?.item_length_ms) { seeking = false; return; }
-		const ms = Math.round((+e.target.value / 100) * player.item_length_ms);
-		anchorPos  = ms;
+		const { positionMs, resumeState } = computeSeekTarget({
+			player,
+			valuePercent: +e.target.value
+		});
+		anchorPos  = positionMs;
 		anchorTime = Date.now();
-		player     = { ...player, state: 'play' };
+		player     = { ...player, state: resumeState };
 		seeking    = false;
-		await seekTo(ms);
+		await seekTo(positionMs);
 	}
 
 	// ── Track info ─────────────────────────────────────────────────────────
@@ -288,7 +318,7 @@
 			<h1 class="text-xl font-bold tracking-tight text-base-content">Music Hub</h1>
 			<div class="flex items-center gap-3">
 				<button
-					onclick={doSwitchSource}
+					onclick={() => doSwitchSource(source === 'cd' ? 'library' : 'cd')}
 					class="text-[13px] font-semibold px-4 py-1.5 rounded-full transition-all duration-200
 						{source === 'cd'
 							? 'bg-primary/15 text-primary'
@@ -400,10 +430,10 @@
 
 				<button
 					onclick={togglePlay}
-					disabled={source === 'library' && libBusy}
+					disabled={(source === 'library' && libBusy) || (source === 'cd' && cdBusy)}
 					class="w-20 h-20 flex items-center justify-center rounded-full
 						btn-play-glass active:scale-90 transition-all
-						{source === 'library' && libBusy ? 'opacity-60' : ''}"
+						{(source === 'library' && libBusy) || (source === 'cd' && cdBusy) ? 'opacity-60' : ''}"
 					aria-label={playing ? 'Pause' : 'Play'}>
 					{#if playing}
 						<svg class="w-8 h-8" viewBox="0 0 24 24" fill="currentColor">
@@ -475,7 +505,7 @@
 			<div class="flex items-center gap-2">
 				<!-- Source toggle (testability) -->
 				<button
-					onclick={doSwitchSource}
+					onclick={() => doSwitchSource(source === 'cd' ? 'library' : 'cd')}
 					class="text-[12px] font-semibold px-3 py-1.5 rounded-full transition-all duration-200
 						{source === 'cd'
 							? 'bg-primary/15 text-primary'
@@ -596,10 +626,10 @@
 
 			<button
 				onclick={togglePlay}
-				disabled={source === 'library' && libBusy}
+				disabled={(source === 'library' && libBusy) || (source === 'cd' && cdBusy)}
 				class="w-20 h-20 flex items-center justify-center rounded-full
 					btn-play-glass active:scale-90 transition-all
-					{source === 'library' && libBusy ? 'opacity-60' : ''}"
+					{(source === 'library' && libBusy) || (source === 'cd' && cdBusy) ? 'opacity-60' : ''}"
 				aria-label={playing ? 'Pause' : 'Play'}>
 				{#if playing}
 					<svg class="w-8 h-8" viewBox="0 0 24 24" fill="currentColor">
@@ -628,7 +658,7 @@
 
 			<!-- CD source -->
 			<button
-				onclick={async () => { if (source !== 'cd') { await switchSource('cd'); source = 'cd'; } activePanel = null; }}
+				onclick={() => { doSwitchSource('cd'); activePanel = null; }}
 				class="flex flex-col items-center gap-1 w-14 transition-colors
 					{source === 'cd' && !activePanel ? 'text-primary' : 'text-base-content/35 hover:text-base-content/60'}"
 				aria-label="CD Player">
