@@ -13,7 +13,10 @@ _NULL_BODY_STATUSES = {204, 205, 304}
 async def album_artwork(album_id: str, maxwidth: int | None = None, maxheight: int | None = None):
     # The only safe source of an artwork path is OwnTone's own artwork_url
     # field, resolved server-side — album_id never reaches the upstream URL.
-    resolved = await owntone.resolve_album_artwork_path(album_id)
+    try:
+        resolved = await owntone.resolve_album_artwork_path(album_id)
+    except Exception:
+        raise HTTPException(502, "artwork upstream unreachable")
     if not resolved:
         raise HTTPException(404, "no artwork for this album")
     return await _stream(resolved, maxwidth, maxheight)
