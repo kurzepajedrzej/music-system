@@ -17,7 +17,20 @@ class OwnToneError(Exception):
 
 
 async def close() -> None:
+    # _client is a process-wide singleton, not scoped to a single app
+    # lifespan. In production the process exits right after this runs, so
+    # it would never matter either way — but this codebase's own test
+    # suite (tests/routers/test_source.py) deliberately runs the real ASGI
+    # lifespan multiple times per process via `with TestClient(app) as
+    # client:` (see that file's docstring for why). Leaving _client closed
+    # here means every OwnTone call after the first such lifespan cycle
+    # raises RuntimeError, which broadcast_state() swallows silently —
+    # manifesting as a hung `ws.receive_json()` in a later, unrelated test
+    # rather than a clear failure. Recreating a fresh client keeps the
+    # module usable across repeated startup/shutdown cycles.
+    global _client
     await _client.aclose()
+    _client = httpx.AsyncClient(timeout=8.0)
 
 
 async def get(path: str) -> dict:
