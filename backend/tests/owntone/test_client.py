@@ -1,3 +1,5 @@
+import asyncio
+
 import httpx
 import pytest
 import respx
@@ -100,6 +102,38 @@ async def test_resolve_album_artwork_path_rate_limits_forced_refresh_on_repeated
     # from the first miss — the remaining four misses land inside the
     # rate-limit window and must not trigger any more.
     assert route.call_count == 2
+
+
+async def test_concurrent_cache_misses_trigger_only_one_refetch(monkeypatch):
+    # The rate-limit interval above only gates the *decision* to force a
+    # refresh, and only helps against effectively-sequential calls (each one
+    # observes the previous one's write before deciding). Under real
+    # concurrency, many requests can each see a stale/empty cache and each
+    # start their own get_albums() call before any of them has finished
+    # repopulating the cache — proven against a real threaded server in the
+    # security review (120 refetches from 3 bursts of 40 concurrent misses).
+    # _album_artwork_refill_lock makes the actual refill single-flight: this
+    # test proves that regardless of how many coroutines race in at once,
+    # only one of them actually calls get_albums().
+    #
+    # respx's mocked transport doesn't yield control to the event loop the
+    # way real I/O does, which would make concurrent calls behave as if
+    # sequential and mask this exact bug — so this monkeypatches
+    # get_albums() directly with a coroutine that does a real asyncio.sleep,
+    # guaranteeing genuine interleaving among the gathered calls.
+    _reset_album_artwork_cache(monkeypatch)
+    call_count = {"n": 0}
+
+    async def slow_get_albums():
+        call_count["n"] += 1
+        await asyncio.sleep(0.05)
+        return {"items": [{"id": "1", "artwork_url": "/artwork/group/1"}]}
+
+    monkeypatch.setattr(owntone, "get_albums", slow_get_albums)
+
+    results = await asyncio.gather(*[owntone._album_artwork_paths() for _ in range(20)])
+    assert call_count["n"] == 1
+    assert all(r == {"1": "artwork/group/1"} for r in results)
 
 
 @respx.mock

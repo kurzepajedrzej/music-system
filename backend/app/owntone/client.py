@@ -1,3 +1,4 @@
+import asyncio
 import re
 import time
 from urllib.parse import urlparse
@@ -161,19 +162,37 @@ _ALBUM_ARTWORK_TTL_S = 60.0
 _last_forced_refresh_at: float = 0.0
 _FORCED_REFRESH_MIN_INTERVAL_S = 5.0
 
+# The rate limit above only gates the *decision* to force a refresh, and
+# only helps when calls are effectively sequential (each one observes the
+# previous one's write before deciding). Under real concurrency, many
+# requests can each see a stale/empty cache and each start their own
+# `get_albums()` call before any of them has finished repopulating the
+# cache — the rate limit does nothing to stop that, since it isn't a lock.
+# This lock makes the actual refill single-flight: only one coroutine at a
+# time may be inside the fetch-and-populate section, and everyone who
+# queued up behind it re-checks freshness once they get their turn, so they
+# reuse the winner's result instead of each doing their own redundant fetch.
+_album_artwork_refill_lock = asyncio.Lock()
+
 
 async def _album_artwork_paths() -> dict[str, str]:
     global _album_artwork_cache
     if _album_artwork_cache and time.monotonic() - _album_artwork_cache["at"] < _ALBUM_ARTWORK_TTL_S:
         return _album_artwork_cache["paths"]
-    albums = await get_albums()
-    paths = {
-        str(album["id"]): _normalize_artwork_path(album["artwork_url"])
-        for album in albums.get("items", [])
-        if album.get("artwork_url")
-    }
-    _album_artwork_cache = {"at": time.monotonic(), "paths": paths}
-    return paths
+    async with _album_artwork_refill_lock:
+        # Re-check after acquiring — another coroutine may have already
+        # refilled the cache while we were waiting on the lock, in which
+        # case we don't need our own redundant fetch.
+        if _album_artwork_cache and time.monotonic() - _album_artwork_cache["at"] < _ALBUM_ARTWORK_TTL_S:
+            return _album_artwork_cache["paths"]
+        albums = await get_albums()
+        paths = {
+            str(album["id"]): _normalize_artwork_path(album["artwork_url"])
+            for album in albums.get("items", [])
+            if album.get("artwork_url")
+        }
+        _album_artwork_cache = {"at": time.monotonic(), "paths": paths}
+        return paths
 
 
 async def resolve_album_artwork_path(album_id: str) -> str | None:
