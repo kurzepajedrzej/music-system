@@ -20,8 +20,14 @@ _ticker_task: asyncio.Task | None = None
 
 
 async def _broadcast(msg: dict) -> None:
+    # Snapshot with list(): _clients is mutated by websocket_endpoint's
+    # connect/disconnect handling, and this loop awaits (send_json) between
+    # elements — a real connect or disconnect landing while we're suspended
+    # mid-iteration would otherwise raise "RuntimeError: Set changed size
+    # during iteration" straight out of the direct `for ws in _clients:`
+    # form. See tests/ws/test_unified.py for a reproduction.
     dead = []
-    for ws in _clients:
+    for ws in list(_clients):
         try:
             await ws.send_json(msg)
         except Exception:
