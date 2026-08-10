@@ -10,12 +10,17 @@ client = TestClient(app)
 
 
 def _reset_album_artwork_cache(monkeypatch):
-    # _album_artwork_cache and _last_forced_refresh_at are module-level
-    # globals in app.owntone.client, shared across the whole test session.
-    # Reset them so each test's respx mocks are actually exercised instead
-    # of silently answered from another test's stale cached data.
+    # _album_artwork_cache, _last_forced_refresh_at, and
+    # _album_artwork_refill_task are module-level globals in
+    # app.owntone.client, shared across the whole test session. Reset them so
+    # each test's respx mocks are actually exercised instead of being
+    # silently answered from another test's stale cached data (or, for the
+    # task, a Task object left over from a previous test's event loop).
+    # Keep this in sync with the identical helper in
+    # tests/owntone/test_client.py — both must reset the same set of globals.
     monkeypatch.setattr(owntone, "_album_artwork_cache", None)
     monkeypatch.setattr(owntone, "_last_forced_refresh_at", 0.0)
+    monkeypatch.setattr(owntone, "_album_artwork_refill_task", None)
 
 
 @respx.mock

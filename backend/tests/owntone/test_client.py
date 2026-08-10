@@ -167,6 +167,47 @@ async def test_concurrent_misses_share_a_single_failure_not_retry_per_caller(mon
     assert call_count["n"] == 1
 
 
+async def test_one_cancelled_caller_does_not_cancel_the_other_waiters(monkeypatch):
+    # Sharing one in-flight task between concurrent callers has a hazard:
+    # awaiting a task directly makes the *awaiter's* cancellation propagate
+    # into the task itself, which asyncio then re-delivers as CancelledError
+    # to every other coroutine awaiting it. One caller wrapped in
+    # asyncio.wait_for (or any cancellation scope) would take down every
+    # other in-flight artwork request with it. asyncio.shield() in
+    # _album_artwork_paths() is what stops that — this test proves it: one of
+    # five concurrent callers is cancelled by a short wait_for timeout, and
+    # the other four must still get their result.
+    _reset_album_artwork_cache(monkeypatch)
+    call_count = {"n": 0}
+
+    async def slow_get_albums():
+        call_count["n"] += 1
+        await asyncio.sleep(0.3)
+        return {"items": [{"id": "1", "artwork_url": "/artwork/group/1"}]}
+
+    monkeypatch.setattr(owntone, "get_albums", slow_get_albums)
+
+    async def caller_that_gets_cancelled():
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(owntone._album_artwork_paths(), 0.05)
+        return "timed-out-as-expected"
+
+    results = await asyncio.gather(
+        caller_that_gets_cancelled(),
+        *[owntone._album_artwork_paths() for _ in range(4)],
+        return_exceptions=True,
+    )
+
+    assert results[0] == "timed-out-as-expected"
+    # The survivors must have real results, not CancelledError bled over
+    # from the one caller that actually was cancelled.
+    assert results[1:] == [{"1": "artwork/group/1"}] * 4
+    # Still single-flight: the cancellation must not have triggered a retry.
+    assert call_count["n"] == 1
+    # And the shared task ran to completion, so the cache is populated.
+    assert owntone._album_artwork_cache["paths"] == {"1": "artwork/group/1"}
+
+
 @respx.mock
 async def test_get_albums_paginates_past_the_1000_item_page_size():
     page1_items = [{"id": str(i)} for i in range(1000)]
