@@ -44,10 +44,14 @@ def _parse_state(raw: bytes) -> str | None:
 class SerialController:
     """Async-compatible RS-232C controller for the Yamaha CDC-600.
 
-    Every access to `self._conn` — from `_handshake`, `_send`, and
-    `_query_status_sync` — happens under `self._port_lock`, so the 2s
-    background poller and an in-flight command can never write/read the
-    shared, non-thread-safe pyserial connection at the same time.
+    `_send` (via `_send_locked`) and `_poll_loop`'s status query both run
+    under `self._port_lock`, so an in-flight command and the background
+    poller can never touch the shared, non-thread-safe pyserial connection
+    at the same time. `_handshake` (called synchronously from `connect()`)
+    is deliberately NOT lock-guarded — it always completes before
+    `_poll_task` is created, so no poller is ever alive to race it. If a
+    future change ever calls `connect()`/`_handshake()` again while a
+    poller is already running, this invariant would need revisiting.
     """
 
     def __init__(self, port: str = "/dev/ttyUSB0", baud: int = 9600) -> None:
