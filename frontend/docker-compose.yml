@@ -1,0 +1,27 @@
+services:
+  music-frontend:
+    build: .
+    container_name: music-frontend
+    ports:
+      - "8082:80"
+    restart: unless-stopped
+    networks:
+      - music
+    depends_on:
+      - music-backend
+
+  music-backend:
+    build: ../music-backend
+    container_name: music-backend
+    restart: unless-stopped
+    environment:
+      - OWNTONE_URL=http://172.17.0.1:3689
+      - CD_CONTROL_URL=http://cd-control:8001
+    networks:
+      - music
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+networks:
+  music:
+    external: true

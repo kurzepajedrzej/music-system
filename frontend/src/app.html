@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang=en data-theme=musiclight>
+	<head>
+		<meta charset=utf-8 />
+		<meta name=viewport content=width=device-width, initial-scale=1, viewport-fit=cover />
+		<meta name=apple-mobile-web-app-capable content=yes />
+		<meta name=apple-mobile-web-app-status-bar-style content=black-translucent />
+		<meta name=theme-color content=#F2F2F7 />
+		<script>
+  (function() {
+    const t = localStorage.getItem('music-theme') || 'musiclight';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+		<link rel=icon href=%sveltekit.assets%/favicon.ico />
+		<link rel=apple-touch-icon href=%sveltekit.assets%/favicon.ico />
+		<title>Music Hub</title>
+		%sveltekit.head%
+	</head>
+	<body class=bg-base-100 text-base-content min-h-screen>
+		<div id=svelte>%sveltekit.body%</div>
+	</body>
+</html>
