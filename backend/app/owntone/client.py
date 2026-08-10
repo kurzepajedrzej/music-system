@@ -186,6 +186,14 @@ _FORCED_REFRESH_MIN_INTERVAL_S = 5.0
 # (a module-level asyncio.Lock() binds to whichever event loop first awaits
 # it, which would break under multiple event loops in one process — not
 # currently how this app runs, but worth avoiding while touching this code).
+#
+# Sharing one task between callers does mean cancellation has to be handled
+# deliberately: awaiting a task directly makes the awaiter's cancellation
+# propagate *into* the task, which would then deliver CancelledError to every
+# other concurrent caller as well — one caller's timeout killing everybody
+# else's request. asyncio.shield() below is what prevents that: a cancelled
+# awaiter is detached from the shared task, and the task itself keeps running
+# for the remaining waiters.
 _album_artwork_refill_task: asyncio.Task | None = None
 
 
@@ -194,11 +202,17 @@ async def _album_artwork_paths() -> dict[str, str]:
     if _album_artwork_cache and time.monotonic() - _album_artwork_cache["at"] < _ALBUM_ARTWORK_TTL_S:
         return _album_artwork_cache["paths"]
     if _album_artwork_refill_task is None or _album_artwork_refill_task.done():
-        # A previous refill task that finished (successfully or by raising)
-        # is replaced here with a fresh one, so a caller arriving after a
-        # failure gets a real retry rather than awaiting a dead task.
+        # A previous refill task that reached a terminal state — completed,
+        # raised, or was cancelled — is replaced here with a fresh one, so a
+        # caller arriving afterwards gets a real retry rather than awaiting a
+        # dead task. (.done() is True for all three of those states.)
         _album_artwork_refill_task = asyncio.ensure_future(_refill_album_artwork_cache())
-    return await _album_artwork_refill_task
+    # shield: if *this* caller is cancelled (e.g. wrapped in asyncio.wait_for,
+    # or its request's cancellation scope tears down), only this caller's
+    # await is cancelled. Without the shield the cancellation would travel
+    # into the shared task and be re-delivered to every other coroutine
+    # awaiting it, turning one caller's cancellation into everyone's failure.
+    return await asyncio.shield(_album_artwork_refill_task)
 
 
 async def _refill_album_artwork_cache() -> dict[str, str]:
