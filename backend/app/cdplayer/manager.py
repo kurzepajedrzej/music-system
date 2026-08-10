@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from typing import Callable
 
 from app import config
@@ -7,6 +8,8 @@ from app.cdplayer.mock_player import MockPlayer
 from app.cdplayer.serial_controller import SerialController
 
 log = logging.getLogger(__name__)
+
+CONFIRMATION_WINDOW_S = 2.5  # longer than SerialController's 2s poll interval
 
 
 class CDPlayerManager:
@@ -16,16 +19,17 @@ class CDPlayerManager:
         use_mock: bool | None = None,
         serial_port: str = "/dev/ttyUSB0",
         reconnect_interval: float = 30.0,
+        confirmation_window_s: float = CONFIRMATION_WINDOW_S,
     ):
         self._use_mock = config.USE_MOCK if use_mock is None else use_mock
         self._player = player or (MockPlayer() if self._use_mock else SerialController(port=serial_port))
         self._listeners: list[Callable] = []
         self._degraded = False
         self._reconnect_interval = reconnect_interval
+        self._confirmation_window_s = confirmation_window_s
 
-        self._command_seq = 0
-        self._confirmed_seq = 0
         self._optimistic_status: dict | None = None
+        self._optimistic_issued_at: float = 0.0
 
         self._player.subscribe(self._on_player_update)
 
@@ -66,16 +70,30 @@ class CDPlayerManager:
 
     async def _on_player_update(self, status: dict) -> None:
         if self._optimistic_status is not None:
-            if status.get("state") == self._optimistic_status.get("state"):
-                self._confirmed_seq = self._command_seq
+            window_elapsed = (time.monotonic() - self._optimistic_issued_at) >= self._confirmation_window_s
+            matches = status.get("state") == self._optimistic_status.get("state")
+            if window_elapsed:
+                # Enough real time has passed since the last command that any
+                # update from here on reflects genuine current reality —
+                # stop filtering, whether or not this one happens to match.
                 self._optimistic_status = None
-            elif self._confirmed_seq < self._command_seq:
-                return  # stale snapshot from before the command took effect — drop it
+            elif not matches:
+                # Still inside the window and doesn't match what we're
+                # waiting to see confirmed — could be a stale snapshot from
+                # before this (or an even earlier) command. Drop it.
+                return
+            # else: matches and window hasn't elapsed — almost certainly the
+            # genuine confirmation, so broadcast it, but deliberately don't
+            # null _optimistic_status here. Keep the filter armed against
+            # this same target value for the rest of the window, so a
+            # DIFFERENT stale update arriving later in the same window
+            # still gets filtered instead of being trusted just because
+            # some earlier update happened to match once.
         await self._broadcast(status)
 
     async def _issue(self, command_fn, optimistic_state: str) -> None:
-        self._command_seq += 1
         self._optimistic_status = {**self._player.status(), "state": optimistic_state}
+        self._optimistic_issued_at = time.monotonic()
         await self._broadcast(self._optimistic_status)
         await command_fn()
 
