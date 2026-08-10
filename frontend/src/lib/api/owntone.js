@@ -2,56 +2,57 @@
 // nginx proxies /api/* → music-backend:3000/api/*
 
 const BASE = '/api';
+const TIMEOUT_MS = 8000;
+
+async function request(path, options = {}) {
+	const r = await fetch(`${BASE}${path}`, { ...options, signal: AbortSignal.timeout(TIMEOUT_MS) });
+	if (!r.ok) {
+		throw new Error(`${options.method ?? 'GET'} ${path} -> ${r.status}`);
+	}
+	if (r.status === 204) return null;
+	return r.json();
+}
 
 export async function getOutputs() {
-	const r = await fetch(`${BASE}/outputs`);
-	const data = await r.json();
+	const data = await request('/outputs');
 	return data.outputs ?? [];
 }
 
 export async function setOutput(id, { enabled, volume }) {
 	const body = {};
 	if (enabled !== undefined) body.selected = enabled;
-	if (volume  !== undefined) body.volume   = volume;
-	await fetch(`${BASE}/outputs/${id}`, {
+	if (volume !== undefined) body.volume = volume;
+	await request(`/outputs/${id}`, {
 		method: 'PUT',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify(body)
 	});
 }
 
-// Library
 export async function getAlbums() {
-	const r = await fetch(`${BASE}/library/albums`);
-	const d = await r.json();
+	const d = await request('/library/albums');
 	return d.items ?? [];
 }
 
 export async function getAlbumTracks(albumId) {
-	const r = await fetch(`${BASE}/library/albums/${albumId}/tracks`);
-	const d = await r.json();
+	const d = await request(`/library/albums/${albumId}/tracks`);
 	return d.items ?? [];
 }
 
-// Player — backend waits for OwnTone confirmation before responding
 export async function getPlayer() {
-	const r = await fetch(`${BASE}/player`);
-	return r.json();
+	return request('/player');
 }
 
 export async function playerCommand(cmd) {
-	const r = await fetch(`${BASE}/player/${cmd}`, { method: 'PUT' });
-	return r.json();
+	return request(`/player/${cmd}`, { method: 'PUT' });
 }
 
 export async function seekTo(position_ms) {
-	const r = await fetch(`${BASE}/player/seek?position_ms=${position_ms}`, { method: 'PUT' });
-	return r.json();
+	return request(`/player/seek?position_ms=${position_ms}`, { method: 'PUT' });
 }
 
-// Queue — atomic operations handled by backend
 export async function clearAndPlay(uri) {
-	await fetch(`${BASE}/queue/play`, {
+	await request('/queue/play', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ uri })
@@ -59,7 +60,7 @@ export async function clearAndPlay(uri) {
 }
 
 export async function addToQueue(uri) {
-	await fetch(`${BASE}/queue/add`, {
+	await request('/queue/add', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ uri })
@@ -67,26 +68,23 @@ export async function addToQueue(uri) {
 }
 
 export async function removeQueueItem(id) {
-	await fetch(`${BASE}/queue/items/${id}`, { method: 'DELETE' });
+	await request(`/queue/items/${id}`, { method: 'DELETE' });
 }
 
 export async function playQueueItem(id) {
-	await fetch(`${BASE}/queue/items/${id}/play`, { method: 'PUT' });
+	await request(`/queue/items/${id}/play`, { method: 'PUT' });
 }
 
 export async function getQueue() {
-	const r = await fetch(`${BASE}/queue`);
-	return r.json();
+	return request('/queue');
 }
 
-// Search
 export async function search(query) {
-	const r = await fetch(`${BASE}/search?type=tracks,albums&query=${encodeURIComponent(query)}`);
-	return r.json();
+	return request(`/search?type=tracks,albums&query=${encodeURIComponent(query)}`);
 }
 
 export async function setPlayerVolume(volume) {
-	await fetch(`${BASE}/player/volume`, {
+	await request('/player/volume', {
 		method: 'PUT',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ volume })
@@ -97,14 +95,10 @@ export function artworkUrl(albumId, size = 240) {
 	return `${BASE}/artwork/album/${albumId}?maxwidth=${size}&maxheight=${size}`;
 }
 
-// Composite state — replaces localStorage cache
 export async function getState() {
-	const r = await fetch(`${BASE}/state`);
-	return r.json();
+	return request('/state');
 }
 
-// Source switching — stops playback and switches OwnTone input
 export async function switchSource(source) {
-	const r = await fetch(`${BASE}/source/${source}`, { method: 'POST' });
-	return r.json();
+	return request(`/source/${source}`, { method: 'POST' });
 }
