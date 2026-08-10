@@ -167,32 +167,50 @@ _FORCED_REFRESH_MIN_INTERVAL_S = 5.0
 # previous one's write before deciding). Under real concurrency, many
 # requests can each see a stale/empty cache and each start their own
 # `get_albums()` call before any of them has finished repopulating the
-# cache — the rate limit does nothing to stop that, since it isn't a lock.
-# This lock makes the actual refill single-flight: only one coroutine at a
-# time may be inside the fetch-and-populate section, and everyone who
-# queued up behind it re-checks freshness once they get their turn, so they
-# reuse the winner's result instead of each doing their own redundant fetch.
-_album_artwork_refill_lock = asyncio.Lock()
+# cache — the rate limit does nothing to stop that on its own.
+#
+# A plain asyncio.Lock around the refill closes that gap for the success
+# case, but creates a worse one for the failure case: a Lock only serializes
+# *turns*, so when get_albums() raises (OwnTone down/restarting), every
+# waiter queued behind the lock gets its own turn and makes its own failing
+# attempt, one after another — N concurrent callers during an outage means
+# up to N sequential httpx timeouts (8s each) queued back to back, all
+# reachable via this same unauthenticated route.
+#
+# A shared in-flight asyncio.Task avoids both problems: every concurrent
+# caller awaits the *same* task, so a failure is delivered to all of them
+# the instant the one real attempt fails (asyncio re-raises the same
+# exception to every awaiter of a failed task — no retry-per-waiter), and
+# because a fresh task is created per refill cycle rather than one
+# long-lived lock object, there's no cross-event-loop binding concern either
+# (a module-level asyncio.Lock() binds to whichever event loop first awaits
+# it, which would break under multiple event loops in one process — not
+# currently how this app runs, but worth avoiding while touching this code).
+_album_artwork_refill_task: asyncio.Task | None = None
 
 
 async def _album_artwork_paths() -> dict[str, str]:
-    global _album_artwork_cache
+    global _album_artwork_cache, _album_artwork_refill_task
     if _album_artwork_cache and time.monotonic() - _album_artwork_cache["at"] < _ALBUM_ARTWORK_TTL_S:
         return _album_artwork_cache["paths"]
-    async with _album_artwork_refill_lock:
-        # Re-check after acquiring — another coroutine may have already
-        # refilled the cache while we were waiting on the lock, in which
-        # case we don't need our own redundant fetch.
-        if _album_artwork_cache and time.monotonic() - _album_artwork_cache["at"] < _ALBUM_ARTWORK_TTL_S:
-            return _album_artwork_cache["paths"]
-        albums = await get_albums()
-        paths = {
-            str(album["id"]): _normalize_artwork_path(album["artwork_url"])
-            for album in albums.get("items", [])
-            if album.get("artwork_url")
-        }
-        _album_artwork_cache = {"at": time.monotonic(), "paths": paths}
-        return paths
+    if _album_artwork_refill_task is None or _album_artwork_refill_task.done():
+        # A previous refill task that finished (successfully or by raising)
+        # is replaced here with a fresh one, so a caller arriving after a
+        # failure gets a real retry rather than awaiting a dead task.
+        _album_artwork_refill_task = asyncio.ensure_future(_refill_album_artwork_cache())
+    return await _album_artwork_refill_task
+
+
+async def _refill_album_artwork_cache() -> dict[str, str]:
+    global _album_artwork_cache
+    albums = await get_albums()
+    paths = {
+        str(album["id"]): _normalize_artwork_path(album["artwork_url"])
+        for album in albums.get("items", [])
+        if album.get("artwork_url")
+    }
+    _album_artwork_cache = {"at": time.monotonic(), "paths": paths}
+    return paths
 
 
 async def resolve_album_artwork_path(album_id: str) -> str | None:

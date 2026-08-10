@@ -36,12 +36,15 @@ async def test_put_succeeds_on_2xx():
 
 
 def _reset_album_artwork_cache(monkeypatch):
-    # _album_artwork_cache and _last_forced_refresh_at are module-level
-    # globals shared across the whole test session — reset them so each
-    # test's respx mocks are actually exercised instead of being silently
-    # answered from another test's stale cached data.
+    # _album_artwork_cache, _last_forced_refresh_at, and
+    # _album_artwork_refill_task are module-level globals shared across the
+    # whole test session — reset them so each test's respx mocks are
+    # actually exercised instead of being silently answered from another
+    # test's stale cached data (or, for the task, a Task object left over
+    # from a previous test's event loop).
     monkeypatch.setattr(owntone, "_album_artwork_cache", None)
     monkeypatch.setattr(owntone, "_last_forced_refresh_at", 0.0)
+    monkeypatch.setattr(owntone, "_album_artwork_refill_task", None)
 
 
 @respx.mock
@@ -112,9 +115,10 @@ async def test_concurrent_cache_misses_trigger_only_one_refetch(monkeypatch):
     # start their own get_albums() call before any of them has finished
     # repopulating the cache — proven against a real threaded server in the
     # security review (120 refetches from 3 bursts of 40 concurrent misses).
-    # _album_artwork_refill_lock makes the actual refill single-flight: this
-    # test proves that regardless of how many coroutines race in at once,
-    # only one of them actually calls get_albums().
+    # A shared in-flight _album_artwork_refill_task makes the actual refill
+    # single-flight: this test proves that regardless of how many coroutines
+    # race in at once, only one of them actually calls get_albums() — the
+    # rest await the same task instead of starting their own.
     #
     # respx's mocked transport doesn't yield control to the event loop the
     # way real I/O does, which would make concurrent calls behave as if
@@ -134,6 +138,33 @@ async def test_concurrent_cache_misses_trigger_only_one_refetch(monkeypatch):
     results = await asyncio.gather(*[owntone._album_artwork_paths() for _ in range(20)])
     assert call_count["n"] == 1
     assert all(r == {"1": "artwork/group/1"} for r in results)
+
+
+async def test_concurrent_misses_share_a_single_failure_not_retry_per_caller(monkeypatch):
+    # A plain lock would only serialize *turns*: if get_albums() raises
+    # (OwnTone down/restarting), every waiter queued behind a lock would get
+    # its own turn and make its own failing attempt, one after another — N
+    # concurrent callers during an outage would mean up to N sequential
+    # httpx timeouts (8s each) queued back to back, reachable via this same
+    # unauthenticated route. The shared-task approach must instead deliver
+    # the single failure to every waiter at once, with only one real
+    # attempt made.
+    _reset_album_artwork_cache(monkeypatch)
+    call_count = {"n": 0}
+
+    async def failing_get_albums():
+        call_count["n"] += 1
+        await asyncio.sleep(0.02)
+        raise owntone.OwnToneError("GET", "/api/library/albums", 503)
+
+    monkeypatch.setattr(owntone, "get_albums", failing_get_albums)
+
+    results = await asyncio.gather(
+        *[owntone._album_artwork_paths() for _ in range(20)],
+        return_exceptions=True,
+    )
+    assert all(isinstance(r, owntone.OwnToneError) for r in results)
+    assert call_count["n"] == 1
 
 
 @respx.mock
