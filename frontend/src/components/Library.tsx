@@ -5,7 +5,7 @@ import { formatDuration } from '../lib/format';
 import { PlusIcon } from './icons';
 import PlaybackBar from './PlaybackBar';
 
-export default function Library() {
+export default function Library({ topPadding = 'pt-5' }: { topPadding?: string }) {
   const { currentTrack } = useLiveState();
   const [albums, setAlbums] = useState<Album[]>([]);
   const [expandedAlbumId, setExpandedAlbumId] = useState<string | null>(null);
@@ -57,7 +57,7 @@ export default function Library() {
 
   return (
     <aside className="bg-base-900 h-full flex flex-col">
-      <div className="flex-1 overflow-y-auto pt-14 px-5 pb-5">
+      <div className={`flex-1 overflow-y-auto ${topPadding} px-5 pb-5`}>
         <h2 className="text-xs font-semibold uppercase tracking-widest text-ink-muted mb-3">Library</h2>
         <ul className="flex flex-col gap-1">
           {albums.map((album) => {
@@ -82,7 +82,7 @@ export default function Library() {
                     {tracksByAlbum[album.id]?.map((track) => {
                       const isCurrent = currentTrack?.id === track.id;
                       return (
-                        <li key={track.id} className="group flex items-center gap-0.5">
+                        <li key={track.id} className="flex items-center gap-0.5">
                           <button
                             onClick={() => handlePlayTrack(track.uri)}
                             className={`flex-1 min-w-0 flex items-baseline gap-2 text-left px-2 py-1.5 rounded-md text-sm transition-colors hover:bg-base-800 ${
@@ -94,10 +94,13 @@ export default function Library() {
                             </span>
                             <span className="text-xs tabular-nums shrink-0">{formatDuration(track.length_ms)}</span>
                           </button>
+                          {/* Always visible, not hover-gated -- hover doesn't
+                              exist on touch, so a hover-revealed button would
+                              be permanently hidden on a phone. */}
                           <button
                             onClick={() => handleAddToQueue(track.uri)}
                             aria-label={`Add ${track.title} to queue`}
-                            className="shrink-0 p-1.5 rounded-md text-ink-muted hover:text-ink hover:bg-base-800 opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="shrink-0 p-2 rounded-md text-ink-muted hover:text-ink hover:bg-base-800 transition-colors"
                           >
                             <PlusIcon className="w-4 h-4" />
                           </button>

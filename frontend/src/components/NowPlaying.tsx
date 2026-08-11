@@ -163,7 +163,7 @@ export default function NowPlaying() {
           onClick={() => handleTransport('prev')}
           disabled={controlsDisabled}
           aria-label="Previous track"
-          className="text-ink disabled:opacity-40"
+          className="p-2.5 -m-2.5 text-ink disabled:opacity-40"
         >
           <PrevIcon className="w-7 h-7" />
         </button>
@@ -187,7 +187,7 @@ export default function NowPlaying() {
           onClick={() => handleTransport('next')}
           disabled={controlsDisabled}
           aria-label="Next track"
-          className="text-ink disabled:opacity-40"
+          className="p-2.5 -m-2.5 text-ink disabled:opacity-40"
         >
           <NextIcon className="w-7 h-7" />
         </button>
@@ -199,7 +199,7 @@ export default function NowPlaying() {
             onClick={() => handleCdAction('disc-prev')}
             disabled={cdActionsDisabled}
             aria-label="Previous disc"
-            className="w-8 h-8 rounded-full bg-base-800 text-ink-muted flex items-center justify-center hover:text-ink transition-colors disabled:opacity-40"
+            className="w-10 h-10 rounded-full bg-base-800 text-ink-muted flex items-center justify-center hover:text-ink transition-colors disabled:opacity-40"
           >
             <ChevronLeftIcon className="w-4 h-4" />
           </button>
@@ -207,7 +207,7 @@ export default function NowPlaying() {
             onClick={() => handleCdAction('open-close')}
             disabled={cdActionsDisabled}
             aria-label="Open or close tray"
-            className="w-8 h-8 rounded-full bg-base-800 text-ink-muted flex items-center justify-center hover:text-ink transition-colors disabled:opacity-40"
+            className="w-10 h-10 rounded-full bg-base-800 text-ink-muted flex items-center justify-center hover:text-ink transition-colors disabled:opacity-40"
           >
             <EjectIcon className="w-4 h-4" />
           </button>
@@ -215,7 +215,7 @@ export default function NowPlaying() {
             onClick={() => handleCdAction('stop')}
             disabled={cdActionsDisabled}
             aria-label="Stop"
-            className="w-8 h-8 rounded-full bg-base-800 text-ink-muted flex items-center justify-center hover:text-ink transition-colors disabled:opacity-40"
+            className="w-10 h-10 rounded-full bg-base-800 text-ink-muted flex items-center justify-center hover:text-ink transition-colors disabled:opacity-40"
           >
             <StopIcon className="w-4 h-4" />
           </button>
@@ -223,7 +223,7 @@ export default function NowPlaying() {
             onClick={() => handleCdAction('repeat')}
             disabled={cdActionsDisabled}
             aria-label="Toggle repeat"
-            className="w-8 h-8 rounded-full bg-base-800 text-ink-muted flex items-center justify-center hover:text-ink transition-colors disabled:opacity-40"
+            className="w-10 h-10 rounded-full bg-base-800 text-ink-muted flex items-center justify-center hover:text-ink transition-colors disabled:opacity-40"
           >
             <RepeatIcon className="w-4 h-4" />
           </button>
@@ -231,7 +231,7 @@ export default function NowPlaying() {
             onClick={() => handleCdAction('random')}
             disabled={cdActionsDisabled}
             aria-label="Toggle random"
-            className="w-8 h-8 rounded-full bg-base-800 text-ink-muted flex items-center justify-center hover:text-ink transition-colors disabled:opacity-40"
+            className="w-10 h-10 rounded-full bg-base-800 text-ink-muted flex items-center justify-center hover:text-ink transition-colors disabled:opacity-40"
           >
             <ShuffleIcon className="w-4 h-4" />
           </button>
@@ -239,7 +239,7 @@ export default function NowPlaying() {
             onClick={() => handleCdAction('disc-next')}
             disabled={cdActionsDisabled}
             aria-label="Next disc"
-            className="w-8 h-8 rounded-full bg-base-800 text-ink-muted flex items-center justify-center hover:text-ink transition-colors disabled:opacity-40"
+            className="w-10 h-10 rounded-full bg-base-800 text-ink-muted flex items-center justify-center hover:text-ink transition-colors disabled:opacity-40"
           >
             <ChevronRightIcon className="w-4 h-4" />
           </button>
@@ -247,7 +247,7 @@ export default function NowPlaying() {
             onClick={() => handleCdAction(isCdOff ? 'power-on' : 'power-off')}
             disabled={cdActionsDisabled}
             aria-label={isCdOff ? 'Turn CD player on' : 'Turn CD player off'}
-            className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors disabled:opacity-40 ml-2 ${
+            className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors disabled:opacity-40 ml-2 ${
               isCdOff ? 'bg-base-800 text-ink-muted hover:text-ink' : 'bg-accent text-base-950'
             }`}
           >

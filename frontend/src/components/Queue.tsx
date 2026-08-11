@@ -40,7 +40,7 @@ export default function Queue() {
         {upcoming.map((item) => (
           <li
             key={item.id}
-            className="group flex items-center gap-3 px-3 py-2 rounded-lg transition-colors hover:bg-base-800"
+            className="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors hover:bg-base-800"
           >
             <button onClick={() => handlePlayItem(item.id)} className="min-w-0 flex-1 text-left">
               <p className="text-sm text-ink truncate">{item.title}</p>
@@ -49,10 +49,13 @@ export default function Queue() {
             <span className="text-xs text-ink-muted tabular-nums shrink-0">
               {formatDuration(item.length_ms ?? 0)}
             </span>
+            {/* Always visible, not hover-gated -- hover doesn't exist on
+                touch, so a hover-revealed button would be permanently
+                hidden on a phone. */}
             <button
               onClick={() => handleRemoveItem(item.id)}
               aria-label="Remove from queue"
-              className="shrink-0 text-ink-muted hover:text-ink opacity-0 group-hover:opacity-100 transition-opacity"
+              className="shrink-0 p-2 -m-2 text-ink-muted hover:text-ink transition-colors"
             >
               <CloseIcon className="w-4 h-4" />
             </button>

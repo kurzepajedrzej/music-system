@@ -8,6 +8,15 @@ body {
   @apply bg-base-950 text-ink;
 }
 
+/* iPhone notch/Dynamic Island and home-indicator clearance -- needs
+   viewport-fit=cover in index.html's meta viewport tag to take effect. */
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
 /* Native range inputs render chunky by default across browsers -- this
    gets us a slim, consistent track + thumb matching the rest of the UI. */
 input[type='range'].slim {
