@@ -1,7 +1,7 @@
 import asyncio
 import re
 import time
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 import httpx
 
@@ -125,7 +125,12 @@ async def get_album_tracks(album_id: str) -> dict:
 
 
 async def search(query: str, type_: str = "tracks,albums") -> dict:
-    return await get(f"/api/search?type={type_}&query={query}")
+    # query has no reason to contain meaningful reserved characters, but
+    # type_ is meant to contain literal commas (e.g. "tracks,albums") —
+    # encoding the comma would change the semantic value OwnTone expects.
+    encoded_query = quote(query, safe="")
+    encoded_type = quote(type_, safe=",")
+    return await get(f"/api/search?type={encoded_type}&query={encoded_query}")
 
 
 # ── Outputs ─────────────────────────────────────────────────────────────────
