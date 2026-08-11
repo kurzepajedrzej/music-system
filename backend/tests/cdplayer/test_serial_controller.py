@@ -281,3 +281,45 @@ async def test_prev_track_does_not_go_below_1():
     await controller.prev_track()
 
     assert controller._track == 1
+
+
+async def test_open_close_sends_correct_bytes_and_sets_changing_state():
+    controller = SerialController()
+    controller._conn = FakeSerial()
+    controller._track = 4
+    controller._state = "playing"
+
+    await controller.open_close()
+
+    assert controller._conn.writes[-1] == bytes([0x02]) + b"07901" + bytes([0x03])
+    assert controller._track == 1
+    assert controller._state == "changing"
+
+
+async def test_select_disc_sends_correct_bytes_for_each_disc_number():
+    controller = SerialController()
+    controller._conn = FakeSerial()
+
+    for n, code in [(1, "7921"), (2, "7922"), (3, "7923"), (4, "7924"), (5, "7925")]:
+        controller._conn.writes.clear()
+        controller._track = 4
+
+        await controller.select_disc(n)
+
+        assert controller._conn.writes[-1] == bytes([0x02]) + b"0" + code.encode("ascii") + bytes([0x03])
+        assert controller._track == 1
+        assert controller._state == "changing"
+
+
+async def test_disc_next_and_disc_prev_send_correct_bytes():
+    controller = SerialController()
+    controller._conn = FakeSerial()
+
+    await controller.disc_next()
+    assert controller._conn.writes[-1] == bytes([0x02]) + b"0794F" + bytes([0x03])
+    assert controller._state == "changing"
+
+    controller._conn.writes.clear()
+    await controller.disc_prev()
+    assert controller._conn.writes[-1] == bytes([0x02]) + b"07950" + bytes([0x03])
+    assert controller._state == "changing"

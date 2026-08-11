@@ -23,6 +23,10 @@ class CDC600Commands:
     STOP = _rc("7956")
     NEXT_TRACK = _rc("7907")
     PREV_TRACK = _rc("7904")
+    OPEN_CLOSE = _rc("7901")
+    DISC_SELECT = {n: _rc(f"792{n}") for n in range(1, 6)}
+    DISC_NEXT = _rc("794F")
+    DISC_PREV = _rc("7950")
     STATUS = STX + b"41000" + ETX
 
 
@@ -221,4 +225,28 @@ class SerialController:
     async def prev_track(self) -> None:
         await self._send_locked(CDC600Commands.PREV_TRACK)
         self._track = max(1, self._track - 1)
+        await self._notify()
+
+    async def open_close(self) -> None:
+        await self._send_locked(CDC600Commands.OPEN_CLOSE)
+        self._track = 1
+        self._state = "changing"
+        await self._notify()
+
+    async def select_disc(self, n: int) -> None:
+        await self._send_locked(CDC600Commands.DISC_SELECT[n])
+        self._track = 1
+        self._state = "changing"
+        await self._notify()
+
+    async def disc_next(self) -> None:
+        await self._send_locked(CDC600Commands.DISC_NEXT)
+        self._track = 1
+        self._state = "changing"
+        await self._notify()
+
+    async def disc_prev(self) -> None:
+        await self._send_locked(CDC600Commands.DISC_PREV)
+        self._track = 1
+        self._state = "changing"
         await self._notify()
