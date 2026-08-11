@@ -33,6 +33,31 @@ uv run uvicorn app.main:app --reload --port 3000
 | `PIPE_URI` | `library:track:1` | OwnTone library URI of the audio pipe track |
 | `PORT` | `3000` | listen port |
 
+## CD player (Yamaha CDC-600)
+
+Real hardware needs one manual, one-time setup step and one non-obvious
+runtime fix — both verified against an actual CDC-600 over a USB→RS-232C
+adapter (CP210x chipset, VID `0x11CA` / PID `0x0204` — the Linux kernel's
+`cp210x` driver picks this ID up automatically; no udev rule needed).
+
+- **RS-232C control is off by default** and must be enabled once from the
+  front panel: hold **PURE DIRECT** + **OPEN/CLOSE** while powering on, then
+  **STOP** ×2 → **SKIP FORWARD** → **PLAY/PAUSE**, then power-cycle via the
+  mains switch. The setting persists across power-offs.
+- **DTR/RTS must be raised explicitly.** The device's own spec says "no flow
+  control", but without `dtr`/`rts` set high right after opening the port
+  (plus a short settle delay before the first write), the CDC-600 stays
+  completely silent — port opens fine, no error, it just never responds.
+  Looks exactly like a wrong port or bad cable; it isn't. `connect()` in
+  `serial_controller.py` handles this.
+
+Port settings: 9600 baud, 8N1, no flow control. Protocol is Yamaha's
+"CD-C600 RS-232C Interface Specifications" (text-frame commands, `STX`/`ETX`
+framing, remote-control hex codes for transport, a `Get player status`
+poll for state) — see `serial_controller.py` for the parts this service
+actually uses; disc/track-position detail (spec's extended `DC4` commands)
+isn't implemented yet.
+
 ## Testing
 
 ```bash

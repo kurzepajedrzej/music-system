@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from typing import Callable
 
 import serial
@@ -29,16 +30,18 @@ _STATUS_CODES = {"10": "playing", "11": "paused", "0E": "stopped", "09": "no_dis
 
 
 def _parse_state(raw: bytes) -> str | None:
-    if not raw:
+    # Response frames are STX + TYP(1) + GRD(1) + SW(1) + [mode(1) +
+    # status(2)] + ETX — the status code is specifically the trailing 2
+    # bytes of that payload, not "any of these strings found anywhere in the
+    # frame" (TYP/GRD/SW/mode digits can and do collide with other status
+    # codes' text).
+    if len(raw) < 2 or raw[:1] != STX or raw[-1:] != ETX:
         return None
-    try:
-        payload = raw[1:-1].decode("ascii", errors="ignore").upper()
-        for code in ("11", "09", "02", "0E", "10"):
-            if code in payload:
-                return _STATUS_CODES[code]
-    except Exception:
-        pass
-    return None
+    payload = raw[1:-1]
+    if len(payload) < 2:
+        return None
+    status_code = payload[-2:].decode("ascii", errors="ignore").upper()
+    return _STATUS_CODES.get(status_code)
 
 
 class SerialController:
@@ -75,6 +78,15 @@ class SerialController:
             stopbits=serial.STOPBITS_ONE,
             timeout=1,
         )
+        # The CDC-600 spec claims "no flow control", but on real hardware the
+        # device stays completely silent — port opens fine, no error, just
+        # never responds — unless DTR/RTS are explicitly raised right after
+        # opening, with a short settle delay before the first write. Without
+        # this it's indistinguishable from a bad port/cable. Confirmed
+        # against real hardware — see README.md's "CD player" section.
+        self._conn.dtr = True
+        self._conn.rts = True
+        time.sleep(0.2)
         self._handshake()
         self._poll_task = asyncio.create_task(self._poll_loop())
 
