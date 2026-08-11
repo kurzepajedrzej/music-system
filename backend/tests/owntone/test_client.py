@@ -233,6 +233,36 @@ async def test_get_albums_single_page_makes_one_request():
     assert route.call_count == 1
 
 
+@respx.mock
+async def test_search_percent_encodes_special_characters_in_query():
+    # search() used to build the upstream URL by raw string interpolation
+    # with no percent-encoding. A query containing "&" broke the upstream
+    # URL's own query-string parsing (extra params get injected), and "#"
+    # truncated the query at the fragment — both silently corrupting the
+    # search rather than raising, since OwnTone would still return 200 for
+    # whatever mangled query it ended up parsing. This proves the actual
+    # request respx captured carries the query percent-encoded, matching
+    # what urllib.parse.quote(query, safe="") produces.
+    route = respx.get(
+        f"{config.OWNTONE_URL}/api/search?type=tracks%2Calbums&query=Simon%20%26%20Garfunkel%20%23%2B%25"
+    ).mock(return_value=httpx.Response(200, json={}))
+    await owntone.search("Simon & Garfunkel #+%")
+    assert route.called
+
+
+@respx.mock
+async def test_search_type_keeps_literal_commas_but_encodes_other_reserved_chars():
+    # type_ is meant to contain literal commas (e.g. "tracks,albums") since
+    # that's the literal separator OwnTone's API expects — encoding the
+    # comma would change the semantic value. Other reserved characters in
+    # type_ should still be encoded like any other query value.
+    route = respx.get(f"{config.OWNTONE_URL}/api/search?type=tracks,albums&query=foo").mock(
+        return_value=httpx.Response(200, json={})
+    )
+    await owntone.search("foo", "tracks,albums")
+    assert route.called
+
+
 async def test_get_ws_url_uses_explicit_env_var(monkeypatch):
     monkeypatch.setattr(config, "OWNTONE_WS_URL", "ws://explicit:1234")
     assert await owntone.get_ws_url() == "ws://explicit:1234"
