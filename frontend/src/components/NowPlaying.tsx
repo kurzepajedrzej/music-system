@@ -1,21 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useLiveState } from '../lib/liveState';
-import { cdCommand, playerCommand, seekTo, switchSource, type CdCommand } from '../lib/api';
-import {
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  DiscIcon,
-  EjectIcon,
-  NextIcon,
-  PauseIcon,
-  PlayIcon,
-  PowerIcon,
-  PrevIcon,
-  RepeatIcon,
-  ShuffleIcon,
-  SpinnerIcon,
-  StopIcon
-} from './icons';
+import { cdCommand, playerCommand, seekTo, switchSource } from '../lib/api';
+import { DiscIcon, NextIcon, PauseIcon, PlayIcon, PrevIcon, SpinnerIcon } from './icons';
+import CdControls from './CdControls';
 import ProgressSlider from './ProgressSlider';
 import Queue from './Queue';
 
@@ -38,7 +25,6 @@ export default function NowPlaying() {
   const { player, currentTrack, cd } = useLiveState();
   const [pending, setPending] = useState<PendingButton>(null);
   const [sourcePending, setSourcePending] = useState(false);
-  const [cdActionPending, setCdActionPending] = useState<CdCommand | null>(null);
   const [artworkFailed, setArtworkFailed] = useState(false);
 
   // The pipe queue item is what routers/source.py's switch_to_cd() queues
@@ -47,10 +33,8 @@ export default function NowPlaying() {
   // right now (that's a separate signal: `cd.state`, not `player.state`).
   const isCdSource = currentTrack?.data_kind === 'pipe';
   const isPlaying = isCdSource ? cd?.state === 'playing' : player?.state === 'play';
-  const isCdOff = cd?.state === 'powered_off';
   const artworkUrl = !isCdSource && currentTrack ? `/api/artwork/item/${currentTrack.id}` : null;
   const controlsDisabled = pending !== null || sourcePending;
-  const cdActionsDisabled = controlsDisabled || cdActionPending !== null;
 
   useEffect(() => {
     setArtworkFailed(false);
@@ -73,18 +57,6 @@ export default function NowPlaying() {
       // the WebSocket is the source of truth, not this promise.
     } finally {
       setPending(null);
-    }
-  }
-
-  async function handleCdAction(cmd: CdCommand) {
-    if (cdActionsDisabled) return;
-    setCdActionPending(cmd);
-    try {
-      await cdCommand(cmd);
-    } catch {
-      // same reasoning as handleTransport -- WS state push corrects this.
-    } finally {
-      setCdActionPending(null);
     }
   }
 
@@ -216,68 +188,7 @@ export default function NowPlaying() {
         </button>
       </div>
 
-      {isCdSource && (
-        <div className="flex items-center gap-2 pt-1">
-          <button
-            onClick={() => handleCdAction('disc-prev')}
-            disabled={cdActionsDisabled}
-            aria-label="Previous disc"
-            className="w-10 h-10 rounded-full bg-base-800 text-ink-muted flex items-center justify-center hover:text-ink transition-colors disabled:opacity-40"
-          >
-            <ChevronLeftIcon className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => handleCdAction('open-close')}
-            disabled={cdActionsDisabled}
-            aria-label="Open or close tray"
-            className="w-10 h-10 rounded-full bg-base-800 text-ink-muted flex items-center justify-center hover:text-ink transition-colors disabled:opacity-40"
-          >
-            <EjectIcon className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => handleCdAction('stop')}
-            disabled={cdActionsDisabled}
-            aria-label="Stop"
-            className="w-10 h-10 rounded-full bg-base-800 text-ink-muted flex items-center justify-center hover:text-ink transition-colors disabled:opacity-40"
-          >
-            <StopIcon className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => handleCdAction('repeat')}
-            disabled={cdActionsDisabled}
-            aria-label="Toggle repeat"
-            className="w-10 h-10 rounded-full bg-base-800 text-ink-muted flex items-center justify-center hover:text-ink transition-colors disabled:opacity-40"
-          >
-            <RepeatIcon className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => handleCdAction('random')}
-            disabled={cdActionsDisabled}
-            aria-label="Toggle random"
-            className="w-10 h-10 rounded-full bg-base-800 text-ink-muted flex items-center justify-center hover:text-ink transition-colors disabled:opacity-40"
-          >
-            <ShuffleIcon className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => handleCdAction('disc-next')}
-            disabled={cdActionsDisabled}
-            aria-label="Next disc"
-            className="w-10 h-10 rounded-full bg-base-800 text-ink-muted flex items-center justify-center hover:text-ink transition-colors disabled:opacity-40"
-          >
-            <ChevronRightIcon className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => handleCdAction(isCdOff ? 'power-on' : 'power-off')}
-            disabled={cdActionsDisabled}
-            aria-label={isCdOff ? 'Turn CD player on' : 'Turn CD player off'}
-            className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors disabled:opacity-40 ml-2 ${
-              isCdOff ? 'bg-base-800 text-ink-muted hover:text-ink' : 'bg-accent text-base-950'
-            }`}
-          >
-            <PowerIcon className="w-4 h-4" />
-          </button>
-        </div>
-      )}
+      {isCdSource && <CdControls disabled={controlsDisabled} />}
 
       {/* The queue is an OwnTone/Library concept -- CD audio has no queue. */}
       {!isCdSource && <Queue />}

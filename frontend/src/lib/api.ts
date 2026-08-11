@@ -36,6 +36,8 @@ export type CdCommand =
   | 'disc-prev'
   | 'repeat'
   | 'random'
+  | 'search-forward'
+  | 'search-backward'
   | 'power-on'
   | 'power-off';
 
@@ -43,6 +45,20 @@ export async function cdCommand(cmd: CdCommand): Promise<void> {
   const res = await fetch(`/api/cd/${cmd}`, { method: 'POST' });
   if (!res.ok) {
     throw new Error(`cd ${cmd} failed: ${res.status}`);
+  }
+}
+
+export async function selectCdDisc(n: number): Promise<void> {
+  const res = await fetch(`/api/cd/disc/${n}`, { method: 'POST' });
+  if (!res.ok) {
+    throw new Error(`select disc ${n} failed: ${res.status}`);
+  }
+}
+
+export async function selectCdTrack(n: number): Promise<void> {
+  const res = await fetch(`/api/cd/track/${n}`, { method: 'POST' });
+  if (!res.ok) {
+    throw new Error(`select track ${n} failed: ${res.status}`);
   }
 }
 
