@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { useLiveState } from '../lib/liveState';
 import Library from './Library';
 import NowPlaying from './NowPlaying';
 import Outputs from './Outputs';
@@ -13,10 +14,14 @@ const TABS: { id: MobileTab; label: string; icon: (className: string) => ReactNo
 ];
 
 export default function MobileLayout() {
+  const { connected } = useLiveState();
   const [tab, setTab] = useState<MobileTab>('now-playing');
 
   return (
-    <div className="h-screen flex flex-col bg-base-950 text-ink font-sans safe-top">
+    <div className="h-dvh flex flex-col bg-base-950 text-ink font-sans safe-top">
+      {!connected && (
+        <p className="shrink-0 text-center text-xs text-red-400 py-1 bg-base-900">Reconnecting…</p>
+      )}
       <div className="flex-1 min-h-0 overflow-y-auto">
         {tab === 'library' && <Library topPadding="pt-5" />}
         {tab === 'now-playing' && <NowPlaying />}
