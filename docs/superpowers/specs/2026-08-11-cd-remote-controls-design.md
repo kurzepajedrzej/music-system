@@ -149,3 +149,12 @@ Manual verification: run the dev server, exercise all nine buttons in a
 browser against the mock player (`CD_USE_MOCK` default in local dev),
 confirm each fires the expected `POST /api/cd/{cmd}` and the UI reflects
 the resulting `cdStatus.state` pushed over the WebSocket.
+
+## Implementation status
+
+Implemented directly from this spec, in the same session it was written,
+without a separate `docs/superpowers/plans/*.md` implementation plan —
+the scope is small and self-contained enough (one new component, one
+call-site wiring change, one CSS cleanup, no backend or API-client
+changes) that a full task-by-task plan document didn't add value beyond
+what's already specified above.
