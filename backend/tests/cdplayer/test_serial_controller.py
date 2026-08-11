@@ -323,3 +323,38 @@ async def test_disc_next_and_disc_prev_send_correct_bytes():
     await controller.disc_prev()
     assert controller._conn.writes[-1] == bytes([0x02]) + b"07950" + bytes([0x03])
     assert controller._state == "changing"
+
+
+async def test_toggle_repeat_and_random_send_correct_bytes_without_changing_state():
+    controller = SerialController()
+    controller._conn = FakeSerial()
+    controller._state = "playing"
+    calls = []
+
+    async def on_update(status):
+        calls.append(status)
+
+    controller.subscribe(on_update)
+
+    await controller.toggle_repeat()
+    assert controller._conn.writes[-1] == bytes([0x02]) + b"07908" + bytes([0x03])
+    assert controller._state == "playing"
+
+    await controller.toggle_random()
+    assert controller._conn.writes[-1] == bytes([0x02]) + b"0791B" + bytes([0x03])
+    assert controller._state == "playing"
+
+    assert calls == []  # neither command claims a state change
+
+
+async def test_search_forward_and_backward_send_correct_bytes_and_set_state():
+    controller = SerialController()
+    controller._conn = FakeSerial()
+
+    await controller.search_forward()
+    assert controller._conn.writes[-1] == bytes([0x02]) + b"07906" + bytes([0x03])
+    assert controller._state == "searching_forward"
+
+    await controller.search_backward()
+    assert controller._conn.writes[-1] == bytes([0x02]) + b"07905" + bytes([0x03])
+    assert controller._state == "searching_backward"
