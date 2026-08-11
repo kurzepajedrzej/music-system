@@ -2,14 +2,18 @@ import { useEffect, useState } from 'react';
 import { useLiveState } from '../lib/liveState';
 import { cdCommand, playerCommand, switchSource, type CdCommand } from '../lib/api';
 import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
   EjectIcon,
   NextIcon,
   PauseIcon,
   PlayIcon,
+  PowerIcon,
   PrevIcon,
   RepeatIcon,
   ShuffleIcon,
-  SpinnerIcon
+  SpinnerIcon,
+  StopIcon
 } from './icons';
 
 type PendingButton = 'prev' | 'playPause' | 'next' | null;
@@ -40,8 +44,10 @@ export default function NowPlaying() {
   // right now (that's a separate signal: `cd.state`, not `player.state`).
   const isCdSource = currentTrack?.data_kind === 'pipe';
   const isPlaying = isCdSource ? cd?.state === 'playing' : player?.state === 'play';
+  const isCdOff = cd?.state === 'powered_off';
   const artworkUrl = !isCdSource && currentTrack ? `/api/artwork/item/${currentTrack.id}` : null;
   const controlsDisabled = pending !== null || sourcePending;
+  const cdActionsDisabled = controlsDisabled || cdActionPending !== null;
 
   useEffect(() => {
     setArtworkFailed(false);
@@ -68,7 +74,7 @@ export default function NowPlaying() {
   }
 
   async function handleCdAction(cmd: CdCommand) {
-    if (controlsDisabled || cdActionPending) return;
+    if (cdActionsDisabled) return;
     setCdActionPending(cmd);
     try {
       await cdCommand(cmd);
@@ -134,7 +140,13 @@ export default function NowPlaying() {
 
       <div className="text-center min-w-0 w-full">
         <p className="text-lg font-semibold text-ink truncate">{title}</p>
-        <p className="text-ink-muted truncate">{subtitle}</p>
+        <div className="flex items-center justify-center gap-1.5 mt-0.5">
+          <span
+            className={`w-1.5 h-1.5 rounded-full shrink-0 ${isPlaying ? 'bg-green-500' : 'bg-ink-muted/50'}`}
+            aria-hidden
+          />
+          <p className="text-ink-muted truncate">{subtitle}</p>
+        </div>
       </div>
 
       <div className="flex items-center gap-8">
@@ -173,26 +185,34 @@ export default function NowPlaying() {
       </div>
 
       {isCdSource && (
-        <div className="flex items-center gap-3 pt-1">
+        <div className="flex items-center gap-2 pt-1">
           <button
             onClick={() => handleCdAction('disc-prev')}
-            disabled={controlsDisabled || cdActionPending !== null}
+            disabled={cdActionsDisabled}
             aria-label="Previous disc"
-            className="px-3 py-1.5 rounded-full bg-base-800 text-ink-muted text-xs font-medium hover:text-ink transition-colors disabled:opacity-40"
+            className="w-8 h-8 rounded-full bg-base-800 text-ink-muted flex items-center justify-center hover:text-ink transition-colors disabled:opacity-40"
           >
-            Disc ‹
+            <ChevronLeftIcon className="w-4 h-4" />
           </button>
           <button
             onClick={() => handleCdAction('open-close')}
-            disabled={controlsDisabled || cdActionPending !== null}
+            disabled={cdActionsDisabled}
             aria-label="Open or close tray"
             className="w-8 h-8 rounded-full bg-base-800 text-ink-muted flex items-center justify-center hover:text-ink transition-colors disabled:opacity-40"
           >
             <EjectIcon className="w-4 h-4" />
           </button>
           <button
+            onClick={() => handleCdAction('stop')}
+            disabled={cdActionsDisabled}
+            aria-label="Stop"
+            className="w-8 h-8 rounded-full bg-base-800 text-ink-muted flex items-center justify-center hover:text-ink transition-colors disabled:opacity-40"
+          >
+            <StopIcon className="w-4 h-4" />
+          </button>
+          <button
             onClick={() => handleCdAction('repeat')}
-            disabled={controlsDisabled || cdActionPending !== null}
+            disabled={cdActionsDisabled}
             aria-label="Toggle repeat"
             className="w-8 h-8 rounded-full bg-base-800 text-ink-muted flex items-center justify-center hover:text-ink transition-colors disabled:opacity-40"
           >
@@ -200,7 +220,7 @@ export default function NowPlaying() {
           </button>
           <button
             onClick={() => handleCdAction('random')}
-            disabled={controlsDisabled || cdActionPending !== null}
+            disabled={cdActionsDisabled}
             aria-label="Toggle random"
             className="w-8 h-8 rounded-full bg-base-800 text-ink-muted flex items-center justify-center hover:text-ink transition-colors disabled:opacity-40"
           >
@@ -208,11 +228,21 @@ export default function NowPlaying() {
           </button>
           <button
             onClick={() => handleCdAction('disc-next')}
-            disabled={controlsDisabled || cdActionPending !== null}
+            disabled={cdActionsDisabled}
             aria-label="Next disc"
-            className="px-3 py-1.5 rounded-full bg-base-800 text-ink-muted text-xs font-medium hover:text-ink transition-colors disabled:opacity-40"
+            className="w-8 h-8 rounded-full bg-base-800 text-ink-muted flex items-center justify-center hover:text-ink transition-colors disabled:opacity-40"
           >
-            Disc ›
+            <ChevronRightIcon className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => handleCdAction(isCdOff ? 'power-on' : 'power-off')}
+            disabled={cdActionsDisabled}
+            aria-label={isCdOff ? 'Turn CD player on' : 'Turn CD player off'}
+            className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors disabled:opacity-40 ml-2 ${
+              isCdOff ? 'bg-base-800 text-ink-muted hover:text-ink' : 'bg-accent text-base-950'
+            }`}
+          >
+            <PowerIcon className="w-4 h-4" />
           </button>
         </div>
       )}
