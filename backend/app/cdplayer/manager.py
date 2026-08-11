@@ -146,6 +146,16 @@ class CDPlayerManager:
         await self._issue(self._player.power_off, "powered_off")
 
     def status(self) -> dict:
+        if self._optimistic_status is not None:
+            window_elapsed = (time.monotonic() - self._optimistic_issued_at) >= self._confirmation_window_s
+            if window_elapsed:
+                # Nothing guarantees another player update ever arrives to
+                # clear this (e.g. the settle update got dropped by
+                # _on_player_update's stale-window filter, or the player
+                # just goes quiet). status() must independently stop
+                # trusting a guess whose confirmation window has expired,
+                # rather than only clearing it inside _on_player_update.
+                self._optimistic_status = None
         base = self._optimistic_status or self._player.status()
         return {**base, "degraded": self._degraded}
 
