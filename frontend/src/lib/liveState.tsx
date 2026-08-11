@@ -146,5 +146,23 @@ export function LiveStateProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    // The WebSocket push above is the primary path for CD state, but CD
+    // transitions (power on, disc changes) can take several real seconds,
+    // and there's no guarantee every push lands (tab backgrounded, a brief
+    // network drop, etc.). Reconciling against the real status directly
+    // every few seconds means a missed push self-corrects quickly instead
+    // of leaving the UI stuck on a stale state indefinitely.
+    const interval = setInterval(() => {
+      fetch('/api/cd/status')
+        .then((res) => (res.ok ? res.json() : null))
+        .then((cd) => {
+          if (cd) setState((prev) => ({ ...prev, cd }));
+        })
+        .catch(() => {});
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
   return <LiveStateContext.Provider value={state}>{children}</LiveStateContext.Provider>;
 }
