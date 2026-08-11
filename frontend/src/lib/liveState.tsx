@@ -5,6 +5,7 @@ export interface QueueItem {
   title?: string;
   artist?: string;
   album?: string;
+  length_ms?: number;
   // "pipe" means this queue item is the raw CD/line-in audio feed
   // (behringer.pipe), not a real library track — see routers/source.py.
   data_kind?: string;

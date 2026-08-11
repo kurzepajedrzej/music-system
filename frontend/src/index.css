@@ -16,7 +16,7 @@ input[type='range'].slim {
   width: 100%;
   height: 4px;
   border-radius: 9999px;
-  background: #332d38;
+  background: #282828;
   cursor: pointer;
 }
 input[type='range'].slim::-webkit-slider-thumb {
@@ -25,17 +25,17 @@ input[type='range'].slim::-webkit-slider-thumb {
   width: 12px;
   height: 12px;
   border-radius: 9999px;
-  background: #f1eae2;
+  background: #ffffff;
 }
 input[type='range'].slim::-moz-range-thumb {
   width: 12px;
   height: 12px;
   border: none;
   border-radius: 9999px;
-  background: #f1eae2;
+  background: #ffffff;
 }
 input[type='range'].slim::-moz-range-track {
   height: 4px;
   border-radius: 9999px;
-  background: #332d38;
+  background: #282828;
 }

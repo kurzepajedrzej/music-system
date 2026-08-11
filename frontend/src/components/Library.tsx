@@ -1,14 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useLiveState } from '../lib/liveState';
 import { getAlbumTracks, getAlbums, playTrack, type Album, type Track } from '../lib/api';
+import { formatDuration } from '../lib/format';
 import PlaybackBar from './PlaybackBar';
-
-function formatDuration(ms: number): string {
-  const totalSeconds = Math.round(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-}
 
 export default function Library() {
   const { currentTrack } = useLiveState();
