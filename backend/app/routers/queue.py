@@ -12,6 +12,7 @@ class UriBody(BaseModel):
     uri: str = Field(min_length=1)
 
 
+@router.get("")
 @router.get("/")
 async def get_queue():
     return await owntone.get_queue()

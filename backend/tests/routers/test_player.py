@@ -60,3 +60,12 @@ def test_volume_in_range_accepted():
 def test_unknown_command_rejected():
     r = client.put("/api/player/not-a-real-command")
     assert r.status_code == 404
+
+
+@respx.mock
+def test_bare_prefix_answers_directly_without_redirect():
+    respx.get(f"{config.OWNTONE_URL}/api/player").mock(
+        return_value=httpx.Response(200, json={"state": "stop"})
+    )
+    r = client.get("/api/player", follow_redirects=False)
+    assert r.status_code == 200

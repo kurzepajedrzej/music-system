@@ -5,6 +5,7 @@ from app.owntone import client as owntone
 router = APIRouter(prefix="/api/outputs", tags=["outputs"])
 
 
+@router.get("")
 @router.get("/")
 async def get_outputs():
     return await owntone.get_outputs()
