@@ -36,3 +36,10 @@ def test_remove_item_accepts_numeric_id():
     respx.delete(f"{config.OWNTONE_URL}/api/queue/items/7").mock(return_value=httpx.Response(200))
     r = client.delete("/api/queue/items/7")
     assert r.status_code == 200
+
+
+@respx.mock
+def test_bare_prefix_answers_directly_without_redirect():
+    respx.get(f"{config.OWNTONE_URL}/api/queue").mock(return_value=httpx.Response(200, json={"items": []}))
+    r = client.get("/api/queue", follow_redirects=False)
+    assert r.status_code == 200

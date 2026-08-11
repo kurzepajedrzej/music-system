@@ -14,6 +14,7 @@ class VolumeBody(BaseModel):
     volume: int = Field(ge=0, le=100)
 
 
+@router.get("")
 @router.get("/")
 async def get_player():
     return await owntone.get_player()

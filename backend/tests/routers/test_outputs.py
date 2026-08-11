@@ -22,3 +22,10 @@ def test_set_output():
     respx.put(f"{config.OWNTONE_URL}/api/outputs/1").mock(return_value=httpx.Response(204))
     r = client.put("/api/outputs/1", json={"selected": True})
     assert r.status_code == 200
+
+
+@respx.mock
+def test_bare_prefix_answers_directly_without_redirect():
+    respx.get(f"{config.OWNTONE_URL}/api/outputs").mock(return_value=httpx.Response(200, json={"outputs": []}))
+    r = client.get("/api/outputs", follow_redirects=False)
+    assert r.status_code == 200

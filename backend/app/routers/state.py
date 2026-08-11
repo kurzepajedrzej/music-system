@@ -8,6 +8,7 @@ from app.owntone import client as owntone
 router = APIRouter(prefix="/api/state", tags=["state"])
 
 
+@router.get("")
 @router.get("/")
 async def get_state():
     try:
