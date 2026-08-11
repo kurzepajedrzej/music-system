@@ -12,10 +12,6 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 
 _clients: set[WebSocket] = set()
-_cached_cd_status: dict = {
-    "state": "stopped", "disc_present": False, "track": 0,
-    "total_tracks": 0, "elapsed_seconds": 0, "track_duration_seconds": 0,
-}
 _ticker_task: asyncio.Task | None = None
 
 
@@ -53,7 +49,7 @@ async def broadcast_state() -> None:
         "player": player,
         "queue": items,
         "currentTrack": current_track,
-        "cd": _cached_cd_status,
+        "cd": manager.status(),
         "timestamp": int(time.time() * 1000),
     })
 
@@ -97,8 +93,6 @@ async def _on_owntone_notify(notifications: list[str]) -> None:
 
 
 async def _on_cd_update(status: dict) -> None:
-    global _cached_cd_status
-    _cached_cd_status = status
     await _broadcast({"type": "cd", "cd": status, "timestamp": int(time.time() * 1000)})
 
 

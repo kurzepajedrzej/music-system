@@ -5,6 +5,7 @@ import respx
 from fastapi.testclient import TestClient
 
 from app import config
+from app.cdplayer.manager import manager
 from app.main import app
 from app.ws import unified
 
@@ -41,6 +42,57 @@ def test_ticker_only_runs_with_connected_clients():
     # and cancel the task immediately on disconnect, rather than leaving it
     # running for up to another full tick interval.
     assert unified._ticker_task is None
+
+
+@respx.mock
+def test_first_broadcast_on_connect_reflects_real_cd_state_not_a_placeholder():
+    # broadcast_state() used to read a module-level _cached_cd_status that
+    # started as a hardcoded placeholder (disc_present: False, track: 0, ...)
+    # and was only ever updated by _on_cd_update, which fires on a CD state
+    # *change* — never seeded with the real current state at startup or on
+    # first connect. So the very first WS frame on every fresh page load
+    # showed "No Disc" even though a disc was actually loaded and
+    # GET /api/state (which calls manager.status() live) reported it
+    # correctly. This drives the mock player to a real, non-default state
+    # before connecting and asserts the FIRST frame already reflects it.
+    respx.get(f"{config.OWNTONE_URL}/api/player").mock(
+        return_value=httpx.Response(200, json={"state": "stop"})
+    )
+    respx.get(f"{config.OWNTONE_URL}/api/queue").mock(
+        return_value=httpx.Response(200, json={"items": []})
+    )
+
+    # manager is a shared module-level singleton, and _optimistic_status is
+    # deliberately sticky (see CDPlayerManager._on_player_update) — an
+    # earlier test issuing a CD command (e.g. test_cd.py's
+    # test_valid_command_accepted) can leave a frozen optimistic snapshot in
+    # place that would otherwise shadow the live player state this test is
+    # about to set, making the test order-dependent. Clear it so this test
+    # observes genuinely live state regardless of what ran before it.
+    manager._optimistic_status = None
+    manager._optimistic_issued_at = 0.0
+
+    real_player = manager._player
+    real_player.disc_present = True
+    real_player.track = 4
+
+    live_status = manager.status()
+    # Sanity check: this genuinely differs from the old hardcoded placeholder
+    # (disc_present: False, track: 0, total_tracks: 0), otherwise the
+    # assertion below would pass vacuously even against the old buggy code.
+    assert live_status["disc_present"] is True
+    assert live_status["track"] == 4
+
+    client = TestClient(app)
+    try:
+        with client.websocket_connect("/api/ws") as ws:
+            first_frame = ws.receive_json()
+            assert first_frame["type"] == "state"
+            assert first_frame["cd"] == live_status
+    finally:
+        real_player.disc_present = True
+        real_player.track = 1
+        unified._clients.clear()
 
 
 class _FakeWebSocket:
