@@ -388,6 +388,62 @@ async def test_select_track_sends_one_frame_per_digit_for_multi_digit_numbers():
     assert controller._track == 12
 
 
+async def test_select_track_sends_entire_digit_and_enter_sequence_as_one_uninterrupted_block(monkeypatch):
+    # asyncio.Lock is FIFO, and _poll_loop contends for self._port_lock every
+    # 2 seconds. If select_track() acquires/releases the lock once per digit
+    # frame (one _send_locked call per digit), a poll iteration queued for
+    # the lock can be granted it mid-entry — its own STATUS query write
+    # (plus a blocking read with up to a 1s timeout) would land in the
+    # middle of the device's multi-key numeric entry sequence, potentially
+    # corrupting it on real hardware. The entire digit+ENTER sequence must
+    # go out under a single lock acquisition instead.
+    controller = SerialController()
+    controller._conn = FakeSerial()
+    order = []
+
+    real_send = controller._send
+
+    def tracking_send(command):
+        kind = "query" if command == sc_module.CDC600Commands.STATUS else "cmd"
+        order.append(f"send-start:{kind}")
+        real_send(command)
+        order.append(f"send-end:{kind}")
+
+    monkeypatch.setattr(controller, "_send", tracking_send)
+
+    # Replicates the exact code path _poll_loop uses: the query function
+    # itself does NOT lock, only _poll_loop's wrapping does, so the test
+    # must replicate that wrapping to be realistic.
+    async def simulated_poll_iteration():
+        async with controller._port_lock:
+            await asyncio.to_thread(controller._query_status_sync)
+
+    # select_track(12) is multi-digit on purpose — a single-digit call has
+    # only one frame plus ENTER, giving fewer opportunities to interleave.
+    await asyncio.gather(controller.select_track(12), simulated_poll_iteration())
+
+    # select_track(12) issues 3 "cmd" sends (digit '1', digit '2', ENTER);
+    # the simulated poll iteration issues 1 "query" send (nested inside
+    # _query_status_sync). 4 sends total = 8 events.
+    assert len(order) == 8
+    cmd_events = [e for e in order if e.endswith(":cmd")]
+    query_events = [e for e in order if e.endswith(":query")]
+    assert cmd_events == [
+        "send-start:cmd", "send-end:cmd",
+        "send-start:cmd", "send-end:cmd",
+        "send-start:cmd", "send-end:cmd",
+    ]
+    assert query_events == ["send-start:query", "send-end:query"]
+
+    # The three cmd send-start/send-end pairs must be contiguous in the
+    # overall interleaving — nothing from the query block landed between
+    # them (i.e. the digit+ENTER sequence went out as one uninterrupted
+    # block relative to the poll's query).
+    cmd_indices = [i for i, e in enumerate(order) if e.endswith(":cmd")]
+    first_cmd, last_cmd = cmd_indices[0], cmd_indices[-1]
+    assert order[first_cmd : last_cmd + 1] == cmd_events
+
+
 async def test_power_on_and_off_send_correct_bytes_and_set_state():
     controller = SerialController()
     controller._conn = FakeSerial()

@@ -276,9 +276,16 @@ class SerialController:
         await self._notify()
 
     async def select_track(self, n: int) -> None:
-        for digit in str(n):
-            await self._send_locked(CDC600Commands.NUMERIC[int(digit)])
-        await self._send_locked(CDC600Commands.ENTER)
+        # The whole digit sequence + ENTER must go out under a single lock
+        # acquisition, not one acquisition per frame (via _send_locked) —
+        # otherwise the FIFO-fair _port_lock can hand the lock to a queued
+        # _poll_loop iteration between digit frames, letting its STATUS
+        # query interleave mid-entry on real hardware.
+        commands = [CDC600Commands.NUMERIC[int(digit)] for digit in str(n)]
+        commands.append(CDC600Commands.ENTER)
+        async with self._port_lock:
+            for command in commands:
+                await asyncio.to_thread(self._send, command)
         self._track = n
         self._state = "seeking"
         await self._notify()
