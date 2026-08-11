@@ -33,7 +33,7 @@ export default function VolumeSlider({
           setLocal(v);
           debouncedOnChange(v);
         }}
-        className="flex-1 accent-accent"
+        className="slim flex-1"
       />
       <span className="text-xs text-ink-muted w-7 text-right shrink-0 tabular-nums">{local}</span>
     </div>

@@ -47,7 +47,7 @@ export default function Outputs() {
   }
 
   return (
-    <aside className="bg-base-900 p-5 flex flex-col gap-7 overflow-y-auto h-full">
+    <aside className="bg-base-900 pt-14 px-5 pb-5 flex flex-col gap-7 overflow-y-auto h-full">
       {/* Master volume only means something once it has more than one
           speaker to balance -- with 0 or 1 selected, that speaker's own
           slider below already is the volume control. */}
