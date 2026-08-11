@@ -53,7 +53,7 @@ export default function Library() {
 
   return (
     <aside className="bg-base-900 p-5 overflow-y-auto h-full">
-      <h2 className="text-xs font-semibold uppercase tracking-widest text-accent mb-3">Library</h2>
+      <h2 className="text-xs font-semibold uppercase tracking-widest text-ink-muted mb-3">Library</h2>
       <ul className="flex flex-col gap-1">
         {albums.map((album) => {
           const isExpanded = expandedAlbumId === album.id;

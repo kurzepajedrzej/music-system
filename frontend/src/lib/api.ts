@@ -28,7 +28,9 @@ export type CdCommand =
   | 'disc-next'
   | 'disc-prev'
   | 'repeat'
-  | 'random';
+  | 'random'
+  | 'power-on'
+  | 'power-off';
 
 export async function cdCommand(cmd: CdCommand): Promise<void> {
   const res = await fetch(`/api/cd/${cmd}`, { method: 'POST' });

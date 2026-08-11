@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLiveState } from '../lib/liveState';
 import { getOutputs, setMasterVolume, setOutput, type Output } from '../lib/api';
 import VolumeSlider from './VolumeSlider';
+import Toggle from './Toggle';
+import { AirPlayIcon } from './icons';
 
 export default function Outputs() {
   const { player } = useLiveState();
@@ -51,33 +53,23 @@ export default function Outputs() {
           slider below already is the volume control. */}
       {selectedCount >= 2 && (
         <div>
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-accent mb-3">Volume</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-ink-muted mb-3">Volume</h2>
           <VolumeSlider value={player?.volume ?? 0} onChange={(v) => setMasterVolume(v).catch(() => {})} />
         </div>
       )}
 
       <div className="min-w-0">
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-accent mb-3">AirPlay</h2>
-        <ul className="flex flex-col gap-1.5">
+        <AirPlayIcon className="w-5 h-5 text-ink-muted mb-3" />
+        <ul className="flex flex-col gap-3">
           {outputs.map((output) => (
-            <li
-              key={output.id}
-              className={`rounded-lg px-3 py-2.5 transition-colors ${output.selected ? 'bg-base-800' : ''}`}
-            >
-              <label className="flex items-center gap-3 text-sm cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={output.selected}
-                  onChange={() => toggleOutput(output)}
-                  className="accent-accent w-4 h-4 shrink-0"
-                />
-                <span className="truncate flex-1 text-ink">{output.name}</span>
-              </label>
-              {output.selected && (
-                <div className="mt-2 pl-7">
-                  <VolumeSlider value={output.volume} onChange={(v) => changeOutputVolume(output, v)} />
-                </div>
-              )}
+            <li key={output.id} className="rounded-lg px-3 py-2.5 bg-base-800/60">
+              <div className="flex items-center gap-3">
+                <span className="truncate flex-1 text-sm text-ink">{output.name}</span>
+                <Toggle checked={output.selected} onChange={() => toggleOutput(output)} label={`Toggle ${output.name}`} />
+              </div>
+              <div className={`mt-2 transition-opacity ${output.selected ? '' : 'opacity-50'}`}>
+                <VolumeSlider value={output.volume} onChange={(v) => changeOutputVolume(output, v)} />
+              </div>
             </li>
           ))}
         </ul>

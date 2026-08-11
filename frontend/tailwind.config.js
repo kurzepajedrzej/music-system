@@ -12,9 +12,8 @@ export default {
           600: '#4A424F'
         },
         accent: {
-          DEFAULT: '#E0954A',
-          soft: '#F2B87A',
-          dim: '#7A5230'
+          DEFAULT: '#7FA98A',
+          dim: '#3E5A48'
         },
         ink: {
           DEFAULT: '#F1EAE2',
