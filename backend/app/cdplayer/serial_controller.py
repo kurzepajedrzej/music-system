@@ -26,7 +26,26 @@ class CDC600Commands:
     STATUS = STX + b"41000" + ETX
 
 
-_STATUS_CODES = {"10": "playing", "11": "paused", "0E": "stopped", "09": "no_disc", "02": "no_disc"}
+_STATUS_CODES = {
+    "00": "changing",  # Power On / status transit
+    "01": "powered_off",
+    "02": "tray_open",
+    "03": "changing",  # Tray Close (transitional)
+    "04": "changing",  # TOC Read stage 0
+    "05": "changing",  # TOC Read stage 1
+    "06": "changing",  # TOC Read stage 2
+    "07": "changing",  # TOC Read stage 3
+    "08": "changing",  # TOC Read stage 4
+    "09": "no_disc",
+    "0A": "seeking",
+    "0E": "stopped",
+    "10": "playing",
+    "11": "paused",
+    "1A": "changing",  # Disc Scan
+    "40": "searching_forward",
+    "50": "searching_backward",
+    "60": "changing",  # Disc Changing
+}
 
 
 def _parse_state(raw: bytes) -> str | None:
