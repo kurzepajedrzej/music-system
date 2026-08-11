@@ -31,6 +31,10 @@ class CDC600Commands:
     RANDOM = _rc("791B")
     SEARCH_FORWARD = _rc("7906")
     SEARCH_BACKWARD = _rc("7905")
+    ENTER = _rc("793F")
+    NUMERIC = {d: _rc(f"791{d}") for d in range(10)}
+    POWER_ON = _rc("797E")
+    POWER_OFF = _rc("797F")
     STATUS = STX + b"41000" + ETX
 
 
@@ -269,4 +273,22 @@ class SerialController:
     async def search_backward(self) -> None:
         await self._send_locked(CDC600Commands.SEARCH_BACKWARD)
         self._state = "searching_backward"
+        await self._notify()
+
+    async def select_track(self, n: int) -> None:
+        for digit in str(n):
+            await self._send_locked(CDC600Commands.NUMERIC[int(digit)])
+        await self._send_locked(CDC600Commands.ENTER)
+        self._track = n
+        self._state = "seeking"
+        await self._notify()
+
+    async def power_on(self) -> None:
+        await self._send_locked(CDC600Commands.POWER_ON)
+        self._state = "changing"
+        await self._notify()
+
+    async def power_off(self) -> None:
+        await self._send_locked(CDC600Commands.POWER_OFF)
+        self._state = "powered_off"
         await self._notify()

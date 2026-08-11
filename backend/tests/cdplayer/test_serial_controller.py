@@ -358,3 +358,44 @@ async def test_search_forward_and_backward_send_correct_bytes_and_set_state():
     await controller.search_backward()
     assert controller._conn.writes[-1] == bytes([0x02]) + b"07905" + bytes([0x03])
     assert controller._state == "searching_backward"
+
+
+async def test_select_track_sends_one_digit_frame_then_enter():
+    controller = SerialController()
+    controller._conn = FakeSerial()
+
+    await controller.select_track(3)
+
+    assert controller._conn.writes == [
+        bytes([0x02]) + b"07913" + bytes([0x03]),  # digit '3'
+        bytes([0x02]) + b"0793F" + bytes([0x03]),  # ENTER
+    ]
+    assert controller._track == 3
+    assert controller._state == "seeking"
+
+
+async def test_select_track_sends_one_frame_per_digit_for_multi_digit_numbers():
+    controller = SerialController()
+    controller._conn = FakeSerial()
+
+    await controller.select_track(12)
+
+    assert controller._conn.writes == [
+        bytes([0x02]) + b"07911" + bytes([0x03]),  # digit '1'
+        bytes([0x02]) + b"07912" + bytes([0x03]),  # digit '2'
+        bytes([0x02]) + b"0793F" + bytes([0x03]),  # ENTER
+    ]
+    assert controller._track == 12
+
+
+async def test_power_on_and_off_send_correct_bytes_and_set_state():
+    controller = SerialController()
+    controller._conn = FakeSerial()
+
+    await controller.power_off()
+    assert controller._conn.writes[-1] == bytes([0x02]) + b"0797F" + bytes([0x03])
+    assert controller._state == "powered_off"
+
+    await controller.power_on()
+    assert controller._conn.writes[-1] == bytes([0x02]) + b"0797E" + bytes([0x03])
+    assert controller._state == "changing"
