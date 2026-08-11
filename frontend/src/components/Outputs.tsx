@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLiveState } from '../lib/liveState';
 import { getOutputs, setMasterVolume, setOutput, type Output } from '../lib/api';
 import VolumeSlider from './VolumeSlider';
@@ -23,6 +23,8 @@ export default function Outputs() {
     return () => clearInterval(interval);
   }, [refresh]);
 
+  const selectedCount = useMemo(() => outputs.filter((o) => o.selected).length, [outputs]);
+
   async function toggleOutput(output: Output) {
     const nextSelected = !output.selected;
     setOutputs((prev) => prev.map((o) => (o.id === output.id ? { ...o, selected: nextSelected } : o)));
@@ -43,29 +45,38 @@ export default function Outputs() {
   }
 
   return (
-    <aside className="border-l border-neutral-800 p-4 flex flex-col gap-6 overflow-y-auto">
-      <div>
-        <h2 className="text-sm uppercase tracking-wide text-neutral-400 mb-2">Volume</h2>
-        <VolumeSlider value={player?.volume ?? 0} onChange={(v) => setMasterVolume(v).catch(() => {})} />
-      </div>
+    <aside className="bg-base-900 p-5 flex flex-col gap-7 overflow-y-auto h-full">
+      {/* Master volume only means something once it has more than one
+          speaker to balance -- with 0 or 1 selected, that speaker's own
+          slider below already is the volume control. */}
+      {selectedCount >= 2 && (
+        <div>
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-accent mb-3">Volume</h2>
+          <VolumeSlider value={player?.volume ?? 0} onChange={(v) => setMasterVolume(v).catch(() => {})} />
+        </div>
+      )}
 
       <div className="min-w-0">
-        <h2 className="text-sm uppercase tracking-wide text-neutral-400 mb-2">AirPlay devices</h2>
-        <ul className="flex flex-col gap-3">
+        <h2 className="text-xs font-semibold uppercase tracking-widest text-accent mb-3">AirPlay</h2>
+        <ul className="flex flex-col gap-1.5">
           {outputs.map((output) => (
-            <li key={output.id} className="flex flex-col gap-1">
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <li
+              key={output.id}
+              className={`rounded-lg px-3 py-2.5 transition-colors ${output.selected ? 'bg-base-800' : ''}`}
+            >
+              <label className="flex items-center gap-3 text-sm cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={output.selected}
                   onChange={() => toggleOutput(output)}
-                  className="accent-neutral-100"
+                  className="accent-accent w-4 h-4 shrink-0"
                 />
-                <span className="truncate flex-1">{output.name}</span>
-                <span className="text-xs text-neutral-500 shrink-0">{output.type}</span>
+                <span className="truncate flex-1 text-ink">{output.name}</span>
               </label>
               {output.selected && (
-                <VolumeSlider value={output.volume} onChange={(v) => changeOutputVolume(output, v)} />
+                <div className="mt-2 pl-7">
+                  <VolumeSlider value={output.volume} onChange={(v) => changeOutputVolume(output, v)} />
+                </div>
               )}
             </li>
           ))}
