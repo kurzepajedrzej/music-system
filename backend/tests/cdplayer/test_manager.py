@@ -203,6 +203,28 @@ async def test_select_track_broadcasts_seeking_and_forwards_track_number():
     assert calls == [7]
 
 
+async def test_optimistic_status_expires_from_status_even_without_a_new_player_update():
+    # The new "changing"-optimistic commands (open_close, select_disc,
+    # disc_next, disc_prev, power_on) can settle into a real terminal state
+    # that differs from the optimistic guess. If the player's own update
+    # for that settle gets dropped by _on_player_update's stale-window
+    # filter (or the player simply never pushes another update again),
+    # nothing should be left holding status() hostage to the stale
+    # optimistic value forever. status() itself must stop trusting
+    # self._optimistic_status once the confirmation window has elapsed,
+    # with zero calls to fake._emit(...).
+    fake = FakePlayer()
+    manager = CDPlayerManager(player=fake, confirmation_window_s=0.05)
+
+    await manager.open_close()
+    assert manager.status()["state"] == "changing"
+
+    # Window elapses with no further update ever pushed by the player.
+    await asyncio.sleep(0.06)
+
+    assert manager.status()["state"] == "stopped"  # fake player's real, never-changed status
+
+
 async def test_power_on_and_off_broadcast_expected_states():
     fake = FakePlayer()
     manager = CDPlayerManager(player=fake, confirmation_window_s=0.5)
