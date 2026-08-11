@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLiveState } from '../lib/liveState';
-import { cdCommand, playerCommand, switchSource, type CdCommand } from '../lib/api';
+import { cdCommand, playerCommand, seekTo, switchSource, type CdCommand } from '../lib/api';
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -16,6 +16,7 @@ import {
   SpinnerIcon,
   StopIcon
 } from './icons';
+import ProgressSlider from './ProgressSlider';
 import Queue from './Queue';
 
 type PendingButton = 'prev' | 'playPause' | 'next' | null;
@@ -103,6 +104,20 @@ export default function NowPlaying() {
   const title = isCdSource ? (cd?.disc_present ? `Track ${cd.track}` : 'CD') : (currentTrack?.title ?? 'Nothing playing');
   const subtitle = isCdSource ? (cd ? (CD_STATE_LABELS[cd.state] ?? cd.state) : '') : (currentTrack?.artist ?? '');
 
+  // No progress bar for CD -- there's no reliable elapsed/duration reading
+  // for physical CD audio (SerialController's elapsed_seconds/
+  // track_duration_seconds are still hardcoded to 0, unlike OwnTone's
+  // item_progress_ms/item_length_ms which the WebSocket tick keeps live).
+  const showProgress = !isCdSource && !!currentTrack;
+
+  async function handleSeek(positionMs: number) {
+    try {
+      await seekTo(positionMs);
+    } catch {
+      // real state arrives over the WebSocket regardless of this promise
+    }
+  }
+
   return (
     <section className="flex flex-col items-center gap-6 px-6 py-10 max-w-xl mx-auto">
       <div className="flex rounded-full bg-base-800 p-1 text-sm">
@@ -157,6 +172,14 @@ export default function NowPlaying() {
           <p className="text-ink-muted truncate">{subtitle}</p>
         </div>
       </div>
+
+      {showProgress && (
+        <ProgressSlider
+          positionMs={player?.item_progress_ms ?? 0}
+          durationMs={player?.item_length_ms ?? 0}
+          onSeek={handleSeek}
+        />
+      )}
 
       <div className="flex items-center gap-8">
         <button
