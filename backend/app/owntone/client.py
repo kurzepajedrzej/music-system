@@ -73,7 +73,9 @@ async def seek_to(position_ms: int) -> None:
 
 
 async def set_player_volume(volume: int) -> None:
-    await put("/api/player", {"volume": volume})
+    # Like seek_to, this is one of OwnTone's query-param endpoints, not a
+    # JSON body -- PUT /api/player {"volume": N} 400s.
+    await put(f"/api/player/volume?volume={volume}")
 
 
 # ── Queue ───────────────────────────────────────────────────────────────────
