@@ -218,10 +218,10 @@ def test_parse_state_maps_no_disc_and_stopped():
 
 
 def test_parse_state_returns_none_for_unmapped_status_code():
-    # "0A" = Seek — a real, documented status, just not one of the four
-    # coarse states this system tracks. Silently ignoring it (rather than
-    # guessing) is correct: the poll loop treats None as "no change".
-    raw = bytes([0x02]) + b"@0400A" + bytes([0x03])
+    # "99" isn't a documented CDC-600 status code at all. Silently ignoring
+    # it (rather than guessing) is correct: the poll loop treats None as
+    # "no change".
+    raw = bytes([0x02]) + b"@04099" + bytes([0x03])
     assert _parse_state(raw) is None
 
 
@@ -229,3 +229,24 @@ def test_parse_state_returns_none_for_malformed_frame():
     assert _parse_state(b"") is None
     assert _parse_state(b"not a frame") is None
     assert _parse_state(bytes([0x02]) + b"@0401") is None  # missing ETX
+
+
+@pytest.mark.parametrize(
+    "status_code,expected_state",
+    [
+        ("00", "changing"),  # Power On / status transit
+        ("01", "powered_off"),
+        ("02", "tray_open"),
+        ("03", "changing"),  # Tray Close (transitional)
+        ("04", "changing"),  # TOC Read stage 0
+        ("08", "changing"),  # TOC Read stage 4
+        ("0A", "seeking"),
+        ("1A", "changing"),  # Disc Scan
+        ("40", "searching_forward"),
+        ("50", "searching_backward"),
+        ("60", "changing"),  # Disc Changing
+    ],
+)
+def test_parse_state_maps_every_documented_status_code(status_code, expected_state):
+    raw = bytes([0x02]) + f"@040{status_code}".encode("ascii") + bytes([0x03])
+    assert _parse_state(raw) == expected_state
