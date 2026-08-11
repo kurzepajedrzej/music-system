@@ -51,6 +51,19 @@ adapter (CP210x chipset, VID `0x11CA` / PID `0x0204` — the Linux kernel's
   Looks exactly like a wrong port or bad cable; it isn't. `connect()` in
   `serial_controller.py` handles this.
 
+Beyond the five basic transport commands, `serial_controller.py`'s
+`CDC600Commands` covers the full remote-equivalent set confirmed against
+real hardware: disc select (`select_disc`, 1-5) and disc skip (`disc_next`/
+`disc_prev`, the changer-level equivalent of `next_track`/`prev_track`),
+`open_close` (tray), `toggle_repeat`/`toggle_random`, `search_forward`/
+`search_backward` (ends via `play`/`pause`/`stop` — there's no dedicated
+"stop searching" code, matching real remote behavior), `select_track`
+(direct numeric jump), and `power_on`/`power_off`. The state model grew to
+match: `changing` covers every disc-swap/TOC-read/power-transition
+substate (there's no user-facing value in telling those apart), plus
+`tray_open`, `seeking`, `searching_forward`/`searching_backward`, and
+`powered_off`.
+
 Port settings: 9600 baud, 8N1, no flow control. Protocol is Yamaha's
 "CD-C600 RS-232C Interface Specifications" (text-frame commands, `STX`/`ETX`
 framing, remote-control hex codes for transport, a `Get player status`
