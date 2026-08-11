@@ -10,6 +10,7 @@
 	import Library      from '$lib/components/Library.svelte';
 	import AirPlayZones from '$lib/components/AirPlayZones.svelte';
 	import Queue        from '$lib/components/Queue.svelte';
+	import CdRemote     from '$lib/components/CdRemote.svelte';
 
 	// ── Theme ──────────────────────────────────────────────────────────────
 	let theme = $state(browser ? (localStorage.getItem('music-theme') || 'musiclight') : 'musiclight');
@@ -135,6 +136,15 @@
 			anchorPos  = 0;
 			anchorTime = Date.now();
 			await playerCommand('previous');
+		}
+	}
+	async function cdRemoteCommand(cmd) {
+		if (cdBusy) return;
+		cdBusy = true;
+		try {
+			await sendCommand(cmd);
+		} finally {
+			cdBusy = false;
 		}
 	}
 
@@ -360,10 +370,8 @@
 			<!-- Artwork -->
 			<div class="w-80 h-80 flex-shrink-0">
 				{#if source === 'cd'}
-					<div class="disc-wrap {cdStatus.state === 'playing' ? 'playing' : ''} w-full" style="aspect-ratio:1">
-						<div class="disc w-full h-full
-							{cdStatus.state === 'playing' ? 'disc-playing' : cdStatus.state === 'paused' ? 'disc-paused' : ''}">
-						</div>
+					<div class="w-full h-full flex items-center justify-center">
+						<CdRemote state={cdStatus.state} busy={cdBusy} onCommand={cdRemoteCommand} />
 					</div>
 				{:else}
 					<div class="w-full h-full rounded-[2rem] overflow-hidden shadow-2xl bg-base-300 flex items-center justify-center">
@@ -540,14 +548,9 @@
 		<!-- Artwork — fills available vertical space -->
 		<div class="flex-1 min-h-0 flex items-center justify-center">
 			{#if source === 'cd'}
-				<!-- CD disc: circle centred in available space -->
-				<div
-					class="disc-wrap {cdStatus.state === 'playing' ? 'playing' : ''} w-full"
-					style="aspect-ratio: 1 / 1; max-height: 100%"
-				>
-					<div class="disc w-full h-full
-						{cdStatus.state === 'playing' ? 'disc-playing' : cdStatus.state === 'paused' ? 'disc-paused' : ''}">
-					</div>
+				<!-- CD remote controls: same slot the disc visual used to occupy -->
+				<div class="w-full h-full flex items-center justify-center" style="aspect-ratio: 1 / 1; max-height: 100%">
+					<CdRemote state={cdStatus.state} busy={cdBusy} onCommand={cdRemoteCommand} />
 				</div>
 			{:else}
 				<!-- Album art square with rounded corners -->
