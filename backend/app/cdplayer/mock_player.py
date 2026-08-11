@@ -8,6 +8,12 @@ class State(str, Enum):
     PLAYING = "playing"
     PAUSED = "paused"
     NO_DISC = "no_disc"
+    TRAY_OPEN = "tray_open"
+    CHANGING = "changing"
+    SEEKING = "seeking"
+    SEARCHING_FORWARD = "searching_forward"
+    SEARCHING_BACKWARD = "searching_backward"
+    POWERED_OFF = "powered_off"
 
 
 MOCK_TRACKS = [214, 183, 197, 245, 163, 221, 178, 209, 190, 237]
@@ -79,6 +85,56 @@ class MockPlayer:
         if self.elapsed <= 3 and self.track > 1:
             self.track -= 1
         self.elapsed = 0.0
+        await self._notify()
+
+    async def open_close(self) -> None:
+        self.state = State.STOPPED if self.state == State.TRAY_OPEN else State.TRAY_OPEN
+        self.track = 1
+        self.elapsed = 0.0
+        await self._notify()
+
+    async def select_disc(self, n: int) -> None:
+        # The mock only ever simulates one disc (MOCK_TRACKS) — which disc
+        # number was requested doesn't matter, this just resets playback the
+        # way a real disc swap would.
+        self.track = 1
+        self.elapsed = 0.0
+        self.state = State.STOPPED
+        await self._notify()
+
+    async def disc_next(self) -> None:
+        await self.select_disc(1)
+
+    async def disc_prev(self) -> None:
+        await self.select_disc(1)
+
+    async def toggle_repeat(self) -> None:
+        pass
+
+    async def toggle_random(self) -> None:
+        pass
+
+    async def search_forward(self) -> None:
+        self.state = State.SEARCHING_FORWARD
+        await self._notify()
+
+    async def search_backward(self) -> None:
+        self.state = State.SEARCHING_BACKWARD
+        await self._notify()
+
+    async def select_track(self, n: int) -> None:
+        if not self.disc_present or not (1 <= n <= len(MOCK_TRACKS)):
+            return
+        self.track = n
+        self.elapsed = 0.0
+        await self._notify()
+
+    async def power_on(self) -> None:
+        self.state = State.STOPPED
+        await self._notify()
+
+    async def power_off(self) -> None:
+        self.state = State.POWERED_OFF
         await self._notify()
 
     def _ensure_tick(self) -> None:
