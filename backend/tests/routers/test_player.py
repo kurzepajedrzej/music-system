@@ -52,9 +52,15 @@ def test_volume_out_of_range_rejected():
 
 @respx.mock
 def test_volume_in_range_accepted():
-    respx.put(f"{config.OWNTONE_URL}/api/player").mock(return_value=httpx.Response(204))
+    # OwnTone's volume endpoint takes the value as a query param, not a
+    # JSON body -- mocking /api/player (no ?volume=) would let this test
+    # pass even if the app sent volume nowhere at all.
+    volume_route = respx.put(f"{config.OWNTONE_URL}/api/player/volume?volume=50").mock(
+        return_value=httpx.Response(204)
+    )
     r = client.put("/api/player/volume", json={"volume": 50})
     assert r.status_code == 200
+    assert volume_route.called
 
 
 def test_unknown_command_rejected():
