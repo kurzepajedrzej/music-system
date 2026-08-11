@@ -45,7 +45,7 @@ export default function PlaybackBar() {
         ) : isPlaying ? (
           <PauseIcon className="w-4 h-4" />
         ) : (
-          <PlayIcon className="w-4 h-4 translate-x-0.5" />
+          <PlayIcon className="w-4 h-4" />
         )}
       </button>
     </div>

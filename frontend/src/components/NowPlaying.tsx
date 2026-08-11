@@ -4,6 +4,7 @@ import { cdCommand, playerCommand, switchSource, type CdCommand } from '../lib/a
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
+  DiscIcon,
   EjectIcon,
   NextIcon,
   PauseIcon,
@@ -125,23 +126,26 @@ export default function NowPlaying() {
         </button>
       </div>
 
-      {/* CD audio has no cover art to source, but the artwork box still
-          reserves its footprint so the layout doesn't jump when switching
-          between Library and CD. */}
-      <div className="w-72 h-72 rounded-2xl overflow-hidden bg-base-800 flex items-center justify-center shrink-0">
-        {!isCdSource && artworkUrl && !artworkFailed && (
-          <img
-            key={artworkUrl}
-            src={artworkUrl}
-            alt=""
-            className="w-full h-full object-cover"
-            onError={() => setArtworkFailed(true)}
-          />
-        )}
-        {!isCdSource && (!artworkUrl || artworkFailed) && (
-          <span className="text-ink-muted text-sm">No artwork</span>
-        )}
-      </div>
+      {/* CD audio has no cover art to source -- rather than an empty photo
+          frame, CD mode gets a small disc mark instead of the full artwork
+          box. */}
+      {isCdSource ? (
+        <DiscIcon className={`w-16 h-16 shrink-0 ${isPlaying ? 'text-accent' : 'text-ink-muted'}`} />
+      ) : (
+        <div className="w-72 h-72 rounded-2xl overflow-hidden bg-base-800 flex items-center justify-center shrink-0">
+          {artworkUrl && !artworkFailed ? (
+            <img
+              key={artworkUrl}
+              src={artworkUrl}
+              alt=""
+              className="w-full h-full object-cover"
+              onError={() => setArtworkFailed(true)}
+            />
+          ) : (
+            <span className="text-ink-muted text-sm">No artwork</span>
+          )}
+        </div>
+      )}
 
       <div className="text-center min-w-0 w-full">
         <p className="text-lg font-semibold text-ink truncate">{title}</p>
@@ -175,7 +179,7 @@ export default function NowPlaying() {
           ) : isPlaying ? (
             <PauseIcon className="w-7 h-7" />
           ) : (
-            <PlayIcon className="w-7 h-7 translate-x-0.5" />
+            <PlayIcon className="w-7 h-7" />
           )}
         </button>
 

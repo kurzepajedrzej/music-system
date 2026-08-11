@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useLiveState } from '../lib/liveState';
-import { getAlbumTracks, getAlbums, playTrack, type Album, type Track } from '../lib/api';
+import { addToQueue, getAlbumTracks, getAlbums, playTrack, type Album, type Track } from '../lib/api';
 import { formatDuration } from '../lib/format';
+import { PlusIcon } from './icons';
 import PlaybackBar from './PlaybackBar';
 
 export default function Library() {
@@ -46,6 +47,14 @@ export default function Library() {
     }
   }
 
+  async function handleAddToQueue(uri: string) {
+    try {
+      await addToQueue(uri);
+    } catch {
+      // real state arrives over the WebSocket regardless of this promise
+    }
+  }
+
   return (
     <aside className="bg-base-900 h-full flex flex-col">
       <div className="flex-1 overflow-y-auto pt-14 px-5 pb-5">
@@ -73,10 +82,10 @@ export default function Library() {
                     {tracksByAlbum[album.id]?.map((track) => {
                       const isCurrent = currentTrack?.id === track.id;
                       return (
-                        <li key={track.id}>
+                        <li key={track.id} className="group flex items-center gap-0.5">
                           <button
                             onClick={() => handlePlayTrack(track.uri)}
-                            className={`w-full flex items-baseline gap-2 text-left px-2 py-1.5 rounded-md text-sm transition-colors hover:bg-base-800 ${
+                            className={`flex-1 min-w-0 flex items-baseline gap-2 text-left px-2 py-1.5 rounded-md text-sm transition-colors hover:bg-base-800 ${
                               isCurrent ? 'text-accent font-medium' : 'text-ink-muted'
                             }`}
                           >
@@ -84,6 +93,13 @@ export default function Library() {
                               {track.track_number}. {track.title}
                             </span>
                             <span className="text-xs tabular-nums shrink-0">{formatDuration(track.length_ms)}</span>
+                          </button>
+                          <button
+                            onClick={() => handleAddToQueue(track.uri)}
+                            aria-label={`Add ${track.title} to queue`}
+                            className="shrink-0 p-1.5 rounded-md text-ink-muted hover:text-ink hover:bg-base-800 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <PlusIcon className="w-4 h-4" />
                           </button>
                         </li>
                       );
