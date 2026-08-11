@@ -250,3 +250,34 @@ def test_parse_state_returns_none_for_malformed_frame():
 def test_parse_state_maps_every_documented_status_code(status_code, expected_state):
     raw = bytes([0x02]) + f"@040{status_code}".encode("ascii") + bytes([0x03])
     assert _parse_state(raw) == expected_state
+
+
+async def test_next_track_increments_local_track_counter():
+    controller = SerialController()
+    controller._conn = FakeSerial()
+    controller._track = 4
+
+    await controller.next_track()
+
+    assert controller._track == 5
+    assert controller.status()["track"] == 5
+
+
+async def test_prev_track_decrements_local_track_counter():
+    controller = SerialController()
+    controller._conn = FakeSerial()
+    controller._track = 4
+
+    await controller.prev_track()
+
+    assert controller._track == 3
+
+
+async def test_prev_track_does_not_go_below_1():
+    controller = SerialController()
+    controller._conn = FakeSerial()
+    controller._track = 1
+
+    await controller.prev_track()
+
+    assert controller._track == 1

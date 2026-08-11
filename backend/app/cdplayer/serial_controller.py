@@ -84,6 +84,7 @@ class SerialController:
 
         self._state: str = "stopped"
         self._disc_present: bool = True
+        self._track: int = 1
 
         self._listeners: list[Callable] = []
         self._poll_task: asyncio.Task | None = None
@@ -186,7 +187,7 @@ class SerialController:
         return {
             "state": self._state,
             "disc_present": self._disc_present,
-            "track": 1,
+            "track": self._track,
             "total_tracks": 0,
             "elapsed_seconds": 0,
             "track_duration_seconds": 0,
@@ -214,8 +215,10 @@ class SerialController:
 
     async def next_track(self) -> None:
         await self._send_locked(CDC600Commands.NEXT_TRACK)
+        self._track += 1
         await self._notify()
 
     async def prev_track(self) -> None:
         await self._send_locked(CDC600Commands.PREV_TRACK)
+        self._track = max(1, self._track - 1)
         await self._notify()
