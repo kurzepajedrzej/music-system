@@ -15,6 +15,7 @@ import {
   SpinnerIcon,
   StopIcon
 } from './icons';
+import Queue from './Queue';
 
 type PendingButton = 'prev' | 'playPause' | 'next' | null;
 
@@ -102,7 +103,7 @@ export default function NowPlaying() {
   const subtitle = isCdSource ? (cd ? (CD_STATE_LABELS[cd.state] ?? cd.state) : '') : (currentTrack?.artist ?? '');
 
   return (
-    <section className="flex flex-col items-center gap-6 px-6 py-10 max-w-sm mx-auto">
+    <section className="flex flex-col items-center gap-6 px-6 py-10 max-w-xl mx-auto">
       <div className="flex rounded-full bg-base-800 p-1 text-sm">
         <button
           onClick={() => handleSwitchSource('library')}
@@ -124,8 +125,11 @@ export default function NowPlaying() {
         </button>
       </div>
 
-      <div className="w-64 h-64 rounded-2xl overflow-hidden bg-base-800 flex items-center justify-center shrink-0">
-        {artworkUrl && !artworkFailed ? (
+      {/* CD audio has no cover art to source, but the artwork box still
+          reserves its footprint so the layout doesn't jump when switching
+          between Library and CD. */}
+      <div className="w-72 h-72 rounded-2xl overflow-hidden bg-base-800 flex items-center justify-center shrink-0">
+        {!isCdSource && artworkUrl && !artworkFailed && (
           <img
             key={artworkUrl}
             src={artworkUrl}
@@ -133,8 +137,9 @@ export default function NowPlaying() {
             className="w-full h-full object-cover"
             onError={() => setArtworkFailed(true)}
           />
-        ) : (
-          <span className="text-ink-muted text-sm">{isCdSource ? 'CD' : 'No artwork'}</span>
+        )}
+        {!isCdSource && (!artworkUrl || artworkFailed) && (
+          <span className="text-ink-muted text-sm">No artwork</span>
         )}
       </div>
 
@@ -246,6 +251,9 @@ export default function NowPlaying() {
           </button>
         </div>
       )}
+
+      {/* The queue is an OwnTone/Library concept -- CD audio has no queue. */}
+      {!isCdSource && <Queue />}
     </section>
   );
 }

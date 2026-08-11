@@ -98,6 +98,20 @@ export async function playTrack(uri: string): Promise<void> {
   }
 }
 
+export async function playQueueItem(itemId: number): Promise<void> {
+  const res = await fetch(`/api/queue/items/${itemId}/play`, { method: 'PUT' });
+  if (!res.ok) {
+    throw new Error(`play queue item failed: ${res.status}`);
+  }
+}
+
+export async function removeQueueItem(itemId: number): Promise<void> {
+  const res = await fetch(`/api/queue/items/${itemId}`, { method: 'DELETE' });
+  if (!res.ok) {
+    throw new Error(`remove queue item failed: ${res.status}`);
+  }
+}
+
 export interface Output {
   id: string;
   name: string;
