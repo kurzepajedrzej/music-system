@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 
 export interface QueueItem {
   id: number;
+  position?: number;
   title?: string;
   artist?: string;
   album?: string;
