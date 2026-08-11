@@ -37,6 +37,39 @@ class FakePlayer:
     async def prev_track(self):
         pass
 
+    async def open_close(self):
+        pass
+
+    async def select_disc(self, n):
+        pass
+
+    async def disc_next(self):
+        pass
+
+    async def disc_prev(self):
+        pass
+
+    async def toggle_repeat(self):
+        pass
+
+    async def toggle_random(self):
+        pass
+
+    async def search_forward(self):
+        pass
+
+    async def search_backward(self):
+        pass
+
+    async def select_track(self, n):
+        pass
+
+    async def power_on(self):
+        pass
+
+    async def power_off(self):
+        pass
+
 
 async def test_stale_poll_update_does_not_roll_back_in_flight_command():
     fake = FakePlayer()
@@ -94,3 +127,88 @@ async def test_connect_failure_marks_degraded_instead_of_raising():
     manager = CDPlayerManager(player=FailingPlayer(), use_mock=False, reconnect_interval=0.01)
     await manager.connect()  # must not raise
     assert manager.status()["degraded"] is True
+
+
+async def test_open_close_broadcasts_changing_optimistic_state():
+    fake = FakePlayer()
+    manager = CDPlayerManager(player=fake, confirmation_window_s=0.5)
+
+    await manager.open_close()
+
+    assert manager.status()["state"] == "changing"
+
+
+async def test_select_disc_broadcasts_changing_and_forwards_disc_number():
+    fake = FakePlayer()
+    calls = []
+
+    async def select_disc(n):
+        calls.append(n)
+
+    fake.select_disc = select_disc
+    manager = CDPlayerManager(player=fake, confirmation_window_s=0.5)
+
+    await manager.select_disc(3)
+
+    assert manager.status()["state"] == "changing"
+    assert calls == [3]
+
+
+async def test_disc_next_and_prev_broadcast_changing_state():
+    fake = FakePlayer()
+    manager = CDPlayerManager(player=fake, confirmation_window_s=0.5)
+
+    await manager.disc_next()
+    assert manager.status()["state"] == "changing"
+
+    await manager.disc_prev()
+    assert manager.status()["state"] == "changing"
+
+
+async def test_toggle_repeat_and_random_do_not_touch_optimistic_state():
+    fake = FakePlayer()
+    manager = CDPlayerManager(player=fake, confirmation_window_s=0.5)
+
+    await manager.toggle_repeat()
+    assert manager.status()["state"] == "stopped"  # unchanged — no optimistic override
+
+    await manager.toggle_random()
+    assert manager.status()["state"] == "stopped"
+
+
+async def test_search_forward_and_backward_broadcast_matching_state():
+    fake = FakePlayer()
+    manager = CDPlayerManager(player=fake, confirmation_window_s=0.5)
+
+    await manager.search_forward()
+    assert manager.status()["state"] == "searching_forward"
+
+    await manager.search_backward()
+    assert manager.status()["state"] == "searching_backward"
+
+
+async def test_select_track_broadcasts_seeking_and_forwards_track_number():
+    fake = FakePlayer()
+    calls = []
+
+    async def select_track(n):
+        calls.append(n)
+
+    fake.select_track = select_track
+    manager = CDPlayerManager(player=fake, confirmation_window_s=0.5)
+
+    await manager.select_track(7)
+
+    assert manager.status()["state"] == "seeking"
+    assert calls == [7]
+
+
+async def test_power_on_and_off_broadcast_expected_states():
+    fake = FakePlayer()
+    manager = CDPlayerManager(player=fake, confirmation_window_s=0.5)
+
+    await manager.power_off()
+    assert manager.status()["state"] == "powered_off"
+
+    await manager.power_on()
+    assert manager.status()["state"] == "changing"
