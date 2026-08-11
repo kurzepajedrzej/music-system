@@ -27,6 +27,10 @@ class CDC600Commands:
     DISC_SELECT = {n: _rc(f"792{n}") for n in range(1, 6)}
     DISC_NEXT = _rc("794F")
     DISC_PREV = _rc("7950")
+    REPEAT = _rc("7908")
+    RANDOM = _rc("791B")
+    SEARCH_FORWARD = _rc("7906")
+    SEARCH_BACKWARD = _rc("7905")
     STATUS = STX + b"41000" + ETX
 
 
@@ -249,4 +253,20 @@ class SerialController:
         await self._send_locked(CDC600Commands.DISC_PREV)
         self._track = 1
         self._state = "changing"
+        await self._notify()
+
+    async def toggle_repeat(self) -> None:
+        await self._send_locked(CDC600Commands.REPEAT)
+
+    async def toggle_random(self) -> None:
+        await self._send_locked(CDC600Commands.RANDOM)
+
+    async def search_forward(self) -> None:
+        await self._send_locked(CDC600Commands.SEARCH_FORWARD)
+        self._state = "searching_forward"
+        await self._notify()
+
+    async def search_backward(self) -> None:
+        await self._send_locked(CDC600Commands.SEARCH_BACKWARD)
+        self._state = "searching_backward"
         await self._notify()
