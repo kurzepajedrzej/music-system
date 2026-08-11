@@ -6,6 +6,14 @@ export function PlayIcon({ className }: { className?: string }) {
   );
 }
 
+export function LibraryIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M4 6h16M4 12h16M4 18h10" />
+    </svg>
+  );
+}
+
 export function CloseIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>

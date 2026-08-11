@@ -1,12 +1,31 @@
 import { useState } from 'react';
 import { useLiveState } from './lib/liveState';
+import { useIsMobile } from './lib/useIsMobile';
 import NowPlaying from './components/NowPlaying';
 import Library from './components/Library';
 import Outputs from './components/Outputs';
+import MobileLayout from './components/MobileLayout';
 import { SidebarLeftIcon, SidebarRightIcon } from './components/icons';
 
 export default function App() {
   const { connected } = useLiveState();
+  const isMobile = useIsMobile();
+
+  if (isMobile) {
+    return (
+      <>
+        {!connected && (
+          <p className="text-center text-xs text-red-400 py-1 bg-base-900">Reconnecting…</p>
+        )}
+        <MobileLayout />
+      </>
+    );
+  }
+
+  return <DesktopLayout connected={connected} />;
+}
+
+function DesktopLayout({ connected }: { connected: boolean }) {
   const [showLibrary, setShowLibrary] = useState(true);
   const [showOutputs, setShowOutputs] = useState(true);
 
@@ -45,11 +64,11 @@ export default function App() {
           gridTemplateRows: '1fr'
         }}
       >
-        <div className="min-w-0 overflow-hidden">{showLibrary && <Library />}</div>
+        <div className="min-w-0 overflow-hidden">{showLibrary && <Library topPadding="pt-14" />}</div>
         <div className="overflow-y-auto">
           <NowPlaying />
         </div>
-        <div className="min-w-0 overflow-hidden">{showOutputs && <Outputs />}</div>
+        <div className="min-w-0 overflow-hidden">{showOutputs && <Outputs topPadding="pt-14" />}</div>
       </div>
     </div>
   );
