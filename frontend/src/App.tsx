@@ -12,14 +12,7 @@ export default function App() {
   const isMobile = useIsMobile();
 
   if (isMobile) {
-    return (
-      <>
-        {!connected && (
-          <p className="text-center text-xs text-red-400 py-1 bg-base-900">Reconnecting…</p>
-        )}
-        <MobileLayout />
-      </>
-    );
+    return <MobileLayout />;
   }
 
   return <DesktopLayout connected={connected} />;
