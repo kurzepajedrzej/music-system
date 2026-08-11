@@ -98,6 +98,17 @@ export async function playTrack(uri: string): Promise<void> {
   }
 }
 
+export async function addToQueue(uri: string): Promise<void> {
+  const res = await fetch('/api/queue/add', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uri })
+  });
+  if (!res.ok) {
+    throw new Error(`add to queue failed: ${res.status}`);
+  }
+}
+
 export async function playQueueItem(itemId: number): Promise<void> {
   const res = await fetch(`/api/queue/items/${itemId}/play`, { method: 'PUT' });
   if (!res.ok) {
