@@ -22,7 +22,7 @@ export default function VolumeSlider({
 
   return (
     <div className="flex items-center gap-2">
-      {label && <span className="text-xs text-neutral-400 w-20 truncate shrink-0">{label}</span>}
+      {label && <span className="text-xs text-ink-muted w-20 truncate shrink-0">{label}</span>}
       <input
         type="range"
         min={0}
@@ -33,9 +33,9 @@ export default function VolumeSlider({
           setLocal(v);
           debouncedOnChange(v);
         }}
-        className="flex-1 accent-neutral-100"
+        className="flex-1 accent-accent"
       />
-      <span className="text-xs text-neutral-400 w-7 text-right shrink-0">{local}</span>
+      <span className="text-xs text-ink-muted w-7 text-right shrink-0 tabular-nums">{local}</span>
     </div>
   );
 }

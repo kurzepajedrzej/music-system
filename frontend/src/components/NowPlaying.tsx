@@ -1,7 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useLiveState } from '../lib/liveState';
-import { cdCommand, playerCommand, switchSource } from '../lib/api';
-import { NextIcon, PauseIcon, PlayIcon, PrevIcon, SpinnerIcon } from './icons';
+import { cdCommand, playerCommand, switchSource, type CdCommand } from '../lib/api';
+import {
+  EjectIcon,
+  NextIcon,
+  PauseIcon,
+  PlayIcon,
+  PrevIcon,
+  RepeatIcon,
+  ShuffleIcon,
+  SpinnerIcon
+} from './icons';
 
 type PendingButton = 'prev' | 'playPause' | 'next' | null;
 
@@ -22,10 +31,11 @@ export default function NowPlaying() {
   const { player, currentTrack, cd } = useLiveState();
   const [pending, setPending] = useState<PendingButton>(null);
   const [sourcePending, setSourcePending] = useState(false);
+  const [cdActionPending, setCdActionPending] = useState<CdCommand | null>(null);
   const [artworkFailed, setArtworkFailed] = useState(false);
 
   // The pipe queue item is what routers/source.py's switch_to_cd() queues
-  // up — as long as it's the current item, we're on the CD source,
+  // up -- as long as it's the current item, we're on the CD source,
   // regardless of whether the physical player itself is playing/paused
   // right now (that's a separate signal: `cd.state`, not `player.state`).
   const isCdSource = currentTrack?.data_kind === 'pipe';
@@ -50,10 +60,22 @@ export default function NowPlaying() {
       }
     } catch {
       // The command may still have taken effect server-side even if this
-      // request failed/timed out client-side — the next state push over
+      // request failed/timed out client-side -- the next state push over
       // the WebSocket is the source of truth, not this promise.
     } finally {
       setPending(null);
+    }
+  }
+
+  async function handleCdAction(cmd: CdCommand) {
+    if (controlsDisabled || cdActionPending) return;
+    setCdActionPending(cmd);
+    try {
+      await cdCommand(cmd);
+    } catch {
+      // same reasoning as handleTransport -- WS state push corrects this.
+    } finally {
+      setCdActionPending(null);
     }
   }
 
@@ -64,7 +86,7 @@ export default function NowPlaying() {
     try {
       await switchSource(target);
     } catch {
-      // same reasoning as handleTransport — WS state push corrects this.
+      // same reasoning as handleTransport.
     } finally {
       setSourcePending(false);
     }
@@ -75,12 +97,12 @@ export default function NowPlaying() {
 
   return (
     <section className="flex flex-col items-center gap-6 px-6 py-10 max-w-sm mx-auto">
-      <div className="flex rounded-full bg-neutral-800 p-1 text-sm">
+      <div className="flex rounded-full bg-base-800 p-1 text-sm">
         <button
           onClick={() => handleSwitchSource('library')}
           disabled={controlsDisabled}
-          className={`px-4 py-1.5 rounded-full transition-colors disabled:opacity-40 ${
-            !isCdSource ? 'bg-neutral-100 text-neutral-900' : 'text-neutral-300'
+          className={`px-4 py-1.5 rounded-full font-medium transition-colors disabled:opacity-40 ${
+            !isCdSource ? 'bg-accent text-base-950' : 'text-ink-muted'
           }`}
         >
           Library
@@ -88,15 +110,15 @@ export default function NowPlaying() {
         <button
           onClick={() => handleSwitchSource('cd')}
           disabled={controlsDisabled}
-          className={`px-4 py-1.5 rounded-full transition-colors disabled:opacity-40 ${
-            isCdSource ? 'bg-neutral-100 text-neutral-900' : 'text-neutral-300'
+          className={`px-4 py-1.5 rounded-full font-medium transition-colors disabled:opacity-40 ${
+            isCdSource ? 'bg-accent text-base-950' : 'text-ink-muted'
           }`}
         >
           CD
         </button>
       </div>
 
-      <div className="w-64 h-64 rounded-lg overflow-hidden bg-neutral-800 flex items-center justify-center shrink-0">
+      <div className="w-64 h-64 rounded-2xl overflow-hidden bg-base-800 flex items-center justify-center shrink-0">
         {artworkUrl && !artworkFailed ? (
           <img
             key={artworkUrl}
@@ -106,13 +128,13 @@ export default function NowPlaying() {
             onError={() => setArtworkFailed(true)}
           />
         ) : (
-          <span className="text-neutral-500 text-sm">{isCdSource ? 'CD' : 'No artwork'}</span>
+          <span className="text-ink-muted text-sm">{isCdSource ? 'CD' : 'No artwork'}</span>
         )}
       </div>
 
       <div className="text-center min-w-0 w-full">
-        <p className="text-lg font-semibold truncate">{title}</p>
-        <p className="text-neutral-400 truncate">{subtitle}</p>
+        <p className="text-lg font-semibold text-ink truncate">{title}</p>
+        <p className="text-ink-muted truncate">{subtitle}</p>
       </div>
 
       <div className="flex items-center gap-8">
@@ -120,7 +142,7 @@ export default function NowPlaying() {
           onClick={() => handleTransport('prev')}
           disabled={controlsDisabled}
           aria-label="Previous track"
-          className="text-neutral-200 disabled:opacity-40"
+          className="text-ink disabled:opacity-40"
         >
           <PrevIcon className="w-7 h-7" />
         </button>
@@ -129,7 +151,7 @@ export default function NowPlaying() {
           onClick={() => handleTransport('playPause')}
           disabled={controlsDisabled}
           aria-label={isPlaying ? 'Pause' : 'Play'}
-          className="w-16 h-16 rounded-full bg-neutral-100 text-neutral-900 flex items-center justify-center disabled:opacity-40"
+          className="w-16 h-16 rounded-full bg-accent text-base-950 flex items-center justify-center disabled:opacity-40"
         >
           {pending === 'playPause' ? (
             <SpinnerIcon className="w-7 h-7" />
@@ -144,11 +166,56 @@ export default function NowPlaying() {
           onClick={() => handleTransport('next')}
           disabled={controlsDisabled}
           aria-label="Next track"
-          className="text-neutral-200 disabled:opacity-40"
+          className="text-ink disabled:opacity-40"
         >
           <NextIcon className="w-7 h-7" />
         </button>
       </div>
+
+      {isCdSource && (
+        <div className="flex items-center gap-3 pt-1">
+          <button
+            onClick={() => handleCdAction('disc-prev')}
+            disabled={controlsDisabled || cdActionPending !== null}
+            aria-label="Previous disc"
+            className="px-3 py-1.5 rounded-full bg-base-800 text-ink-muted text-xs font-medium hover:text-ink transition-colors disabled:opacity-40"
+          >
+            Disc ‹
+          </button>
+          <button
+            onClick={() => handleCdAction('open-close')}
+            disabled={controlsDisabled || cdActionPending !== null}
+            aria-label="Open or close tray"
+            className="w-8 h-8 rounded-full bg-base-800 text-ink-muted flex items-center justify-center hover:text-ink transition-colors disabled:opacity-40"
+          >
+            <EjectIcon className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => handleCdAction('repeat')}
+            disabled={controlsDisabled || cdActionPending !== null}
+            aria-label="Toggle repeat"
+            className="w-8 h-8 rounded-full bg-base-800 text-ink-muted flex items-center justify-center hover:text-ink transition-colors disabled:opacity-40"
+          >
+            <RepeatIcon className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => handleCdAction('random')}
+            disabled={controlsDisabled || cdActionPending !== null}
+            aria-label="Toggle random"
+            className="w-8 h-8 rounded-full bg-base-800 text-ink-muted flex items-center justify-center hover:text-ink transition-colors disabled:opacity-40"
+          >
+            <ShuffleIcon className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => handleCdAction('disc-next')}
+            disabled={controlsDisabled || cdActionPending !== null}
+            aria-label="Next disc"
+            className="px-3 py-1.5 rounded-full bg-base-800 text-ink-muted text-xs font-medium hover:text-ink transition-colors disabled:opacity-40"
+          >
+            Disc ›
+          </button>
+        </div>
+      )}
     </section>
   );
 }

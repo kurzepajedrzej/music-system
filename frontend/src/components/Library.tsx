@@ -52,42 +52,51 @@ export default function Library() {
   }
 
   return (
-    <aside className="border-r border-neutral-800 p-4 overflow-y-auto">
-      <h2 className="text-sm uppercase tracking-wide text-neutral-400 mb-3">Library</h2>
+    <aside className="bg-base-900 p-5 overflow-y-auto h-full">
+      <h2 className="text-xs font-semibold uppercase tracking-widest text-accent mb-3">Library</h2>
       <ul className="flex flex-col gap-1">
-        {albums.map((album) => (
-          <li key={album.id}>
-            <button
-              onClick={() => toggleAlbum(album)}
-              className="w-full text-left px-2 py-1.5 rounded hover:bg-neutral-800 transition-colors"
-            >
-              <p className="text-sm font-medium truncate">{album.name}</p>
-              <p className="text-xs text-neutral-400 truncate">{album.artist}</p>
-            </button>
+        {albums.map((album) => {
+          const isExpanded = expandedAlbumId === album.id;
+          return (
+            <li key={album.id}>
+              <button
+                onClick={() => toggleAlbum(album)}
+                className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+                  isExpanded ? 'bg-base-800' : 'hover:bg-base-800'
+                }`}
+              >
+                <p className="text-sm font-medium text-ink truncate">{album.name}</p>
+                <p className="text-xs text-ink-muted truncate">{album.artist}</p>
+              </button>
 
-            {expandedAlbumId === album.id && (
-              <ul className="ml-2 border-l border-neutral-800 pl-2 mb-2">
-                {loadingAlbumId === album.id && <li className="text-xs text-neutral-500 py-1">Loading…</li>}
-                {tracksByAlbum[album.id]?.map((track) => {
-                  const isCurrent = currentTrack?.id === track.id;
-                  return (
-                    <li key={track.id}>
-                      <button
-                        onClick={() => handlePlayTrack(track.uri)}
-                        className={`w-full text-left px-2 py-1 rounded text-sm truncate hover:bg-neutral-800 transition-colors ${
-                          isCurrent ? 'text-neutral-100 font-medium' : 'text-neutral-300'
-                        }`}
-                      >
-                        {track.track_number}. {track.title}{' '}
-                        <span className="text-neutral-500">{formatDuration(track.length_ms)}</span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </li>
-        ))}
+              {isExpanded && (
+                <ul className="ml-3 border-l border-base-700 pl-3 mt-1 mb-2 flex flex-col gap-0.5">
+                  {loadingAlbumId === album.id && (
+                    <li className="text-xs text-ink-muted py-1.5">Loading…</li>
+                  )}
+                  {tracksByAlbum[album.id]?.map((track) => {
+                    const isCurrent = currentTrack?.id === track.id;
+                    return (
+                      <li key={track.id}>
+                        <button
+                          onClick={() => handlePlayTrack(track.uri)}
+                          className={`w-full flex items-baseline gap-2 text-left px-2 py-1.5 rounded-md text-sm transition-colors hover:bg-base-800 ${
+                            isCurrent ? 'text-accent font-medium' : 'text-ink-muted'
+                          }`}
+                        >
+                          <span className="truncate flex-1">
+                            {track.track_number}. {track.title}
+                          </span>
+                          <span className="text-xs tabular-nums shrink-0">{formatDuration(track.length_ms)}</span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </aside>
   );

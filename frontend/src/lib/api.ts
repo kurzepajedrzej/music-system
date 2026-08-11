@@ -18,7 +18,17 @@ export async function setMasterVolume(volume: number): Promise<void> {
   }
 }
 
-export type CdCommand = 'play' | 'pause' | 'stop' | 'next' | 'prev';
+export type CdCommand =
+  | 'play'
+  | 'pause'
+  | 'stop'
+  | 'next'
+  | 'prev'
+  | 'open-close'
+  | 'disc-next'
+  | 'disc-prev'
+  | 'repeat'
+  | 'random';
 
 export async function cdCommand(cmd: CdCommand): Promise<void> {
   const res = await fetch(`/api/cd/${cmd}`, { method: 'POST' });
@@ -100,7 +110,10 @@ export async function getOutputs(): Promise<Output[]> {
     throw new Error(`get outputs failed: ${res.status}`);
   }
   const data = await res.json();
-  return data.outputs ?? [];
+  const outputs: Output[] = data.outputs ?? [];
+  // Only AirPlay speakers are meant to be controlled here -- Chromecast and
+  // the server's own ALSA output aren't part of this control surface.
+  return outputs.filter((output) => output.type.startsWith('AirPlay'));
 }
 
 export async function setOutput(id: string, body: { selected?: boolean; volume?: number }): Promise<void> {
