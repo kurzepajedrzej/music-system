@@ -11,30 +11,32 @@ export default function App() {
   const [showOutputs, setShowOutputs] = useState(true);
 
   return (
-    <div className="h-screen flex flex-col bg-base-950 text-ink font-sans">
-      {!connected && <p className="text-center text-xs text-red-400 py-1 bg-base-900">Reconnecting…</p>}
+    <div className="h-screen flex flex-col bg-base-950 text-ink font-sans relative">
+      {!connected && (
+        <p className="text-center text-xs text-red-400 py-1 bg-base-900 shrink-0">Reconnecting…</p>
+      )}
 
-      <header className="flex items-center justify-between px-4 py-3 border-b border-base-800 shrink-0">
-        <button
-          onClick={() => setShowLibrary((v) => !v)}
-          aria-label="Toggle library panel"
-          aria-pressed={showLibrary}
-          className={`p-2 rounded-lg transition-colors ${showLibrary ? 'text-accent' : 'text-ink-muted hover:text-ink'}`}
-        >
-          <SidebarLeftIcon className="w-5 h-5" />
-        </button>
+      <button
+        onClick={() => setShowLibrary((v) => !v)}
+        aria-label="Toggle library panel"
+        aria-pressed={showLibrary}
+        className={`fixed top-4 left-4 z-10 p-2 rounded-full bg-base-800 transition-colors ${
+          showLibrary ? 'text-accent' : 'text-ink-muted hover:text-ink'
+        }`}
+      >
+        <SidebarLeftIcon className="w-5 h-5" />
+      </button>
 
-        <h1 className="text-sm font-semibold tracking-wide text-ink-muted">Music</h1>
-
-        <button
-          onClick={() => setShowOutputs((v) => !v)}
-          aria-label="Toggle outputs panel"
-          aria-pressed={showOutputs}
-          className={`p-2 rounded-lg transition-colors ${showOutputs ? 'text-accent' : 'text-ink-muted hover:text-ink'}`}
-        >
-          <SidebarRightIcon className="w-5 h-5" />
-        </button>
-      </header>
+      <button
+        onClick={() => setShowOutputs((v) => !v)}
+        aria-label="Toggle outputs panel"
+        aria-pressed={showOutputs}
+        className={`fixed top-4 right-4 z-10 p-2 rounded-full bg-base-800 transition-colors ${
+          showOutputs ? 'text-accent' : 'text-ink-muted hover:text-ink'
+        }`}
+      >
+        <SidebarRightIcon className="w-5 h-5" />
+      </button>
 
       <div
         className="flex-1 grid min-h-0 transition-[grid-template-columns] duration-200"
