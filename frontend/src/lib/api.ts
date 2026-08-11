@@ -7,6 +7,13 @@ export async function playerCommand(cmd: PlayerCommand): Promise<void> {
   }
 }
 
+export async function seekTo(positionMs: number): Promise<void> {
+  const res = await fetch(`/api/player/seek?position_ms=${Math.round(positionMs)}`, { method: 'PUT' });
+  if (!res.ok) {
+    throw new Error(`seek failed: ${res.status}`);
+  }
+}
+
 export async function setMasterVolume(volume: number): Promise<void> {
   const res = await fetch('/api/player/volume', {
     method: 'PUT',
