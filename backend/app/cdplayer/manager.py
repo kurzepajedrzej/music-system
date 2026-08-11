@@ -112,6 +112,39 @@ class CDPlayerManager:
     async def prev_track(self) -> None:
         await self._player.prev_track()
 
+    async def open_close(self) -> None:
+        await self._issue(self._player.open_close, "changing")
+
+    async def select_disc(self, n: int) -> None:
+        await self._issue(lambda: self._player.select_disc(n), "changing")
+
+    async def disc_next(self) -> None:
+        await self._issue(self._player.disc_next, "changing")
+
+    async def disc_prev(self) -> None:
+        await self._issue(self._player.disc_prev, "changing")
+
+    async def toggle_repeat(self) -> None:
+        await self._player.toggle_repeat()
+
+    async def toggle_random(self) -> None:
+        await self._player.toggle_random()
+
+    async def search_forward(self) -> None:
+        await self._issue(self._player.search_forward, "searching_forward")
+
+    async def search_backward(self) -> None:
+        await self._issue(self._player.search_backward, "searching_backward")
+
+    async def select_track(self, n: int) -> None:
+        await self._issue(lambda: self._player.select_track(n), "seeking")
+
+    async def power_on(self) -> None:
+        await self._issue(self._player.power_on, "changing")
+
+    async def power_off(self) -> None:
+        await self._issue(self._player.power_off, "powered_off")
+
     def status(self) -> dict:
         base = self._optimistic_status or self._player.status()
         return {**base, "degraded": self._degraded}
