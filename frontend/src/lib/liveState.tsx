@@ -26,6 +26,7 @@ export interface CdStatus {
   state: string;
   disc_present: boolean;
   track: number;
+  disc: number;
   total_tracks: number;
   elapsed_seconds: number;
   track_duration_seconds: number;

@@ -23,6 +23,7 @@ class MockPlayer:
     def __init__(self) -> None:
         self.state: State = State.STOPPED
         self.track: int = 1
+        self.disc: int = 1
         self.elapsed: float = 0.0
         self.disc_present: bool = True
         self._listeners: list[Callable] = []
@@ -45,6 +46,7 @@ class MockPlayer:
             "state": self.state,
             "disc_present": self.disc_present,
             "track": self.track,
+            "disc": self.disc,
             "total_tracks": len(MOCK_TRACKS) if self.disc_present else 0,
             "elapsed_seconds": int(self.elapsed),
             "track_duration_seconds": duration,
@@ -89,24 +91,32 @@ class MockPlayer:
 
     async def open_close(self) -> None:
         self.state = State.STOPPED if self.state == State.TRAY_OPEN else State.TRAY_OPEN
+        self.disc = 1
         self.track = 1
         self.elapsed = 0.0
         await self._notify()
 
     async def select_disc(self, n: int) -> None:
-        # The mock only ever simulates one disc (MOCK_TRACKS) — which disc
-        # number was requested doesn't matter, this just resets playback the
-        # way a real disc swap would.
+        # The mock only ever simulates one disc's worth of tracks
+        # (MOCK_TRACKS) — which disc number was requested doesn't change
+        # playback data, but it's still tracked so the "current disc"
+        # label behaves the same way it does against real hardware.
+        # State goes to CHANGING (not STOPPED) to match SerialController,
+        # which CDPlayerManager.select_disc() optimistically assumes —
+        # otherwise the mock's real update never matches the optimistic
+        # "changing" target and gets dropped for the whole confirmation
+        # window, making mock/dev mode behave differently from hardware.
+        self.disc = n
         self.track = 1
         self.elapsed = 0.0
-        self.state = State.STOPPED
+        self.state = State.CHANGING
         await self._notify()
 
     async def disc_next(self) -> None:
-        await self.select_disc(1)
+        await self.select_disc(self.disc % 5 + 1)
 
     async def disc_prev(self) -> None:
-        await self.select_disc(1)
+        await self.select_disc((self.disc - 2) % 5 + 1)
 
     async def toggle_repeat(self) -> None:
         pass

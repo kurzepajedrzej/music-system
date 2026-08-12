@@ -8,6 +8,7 @@ from app.cdplayer.manager import CDPlayerManager
 class FakePlayer:
     def __init__(self):
         self._state = "stopped"
+        self._disc = 1
         self._listeners = []
 
     def subscribe(self, cb):
@@ -15,10 +16,13 @@ class FakePlayer:
 
     def status(self):
         return {"state": self._state, "disc_present": True, "track": 1,
-                "total_tracks": 10, "elapsed_seconds": 0, "track_duration_seconds": 200}
+                "total_tracks": 10, "elapsed_seconds": 0, "track_duration_seconds": 200,
+                "disc": self._disc}
 
-    async def _emit(self, state):
+    async def _emit(self, state, disc=None):
         self._state = state
+        if disc is not None:
+            self._disc = disc
         for cb in self._listeners:
             await cb(self.status())
 
@@ -223,6 +227,30 @@ async def test_optimistic_status_expires_from_status_even_without_a_new_player_u
     await asyncio.sleep(0.06)
 
     assert manager.status()["state"] == "stopped"  # fake player's real, never-changed status
+
+
+async def test_matching_update_refreshes_stale_companion_fields():
+    # _issue() snapshots the player's status *before* the command runs, so
+    # every field besides "state" in that optimistic snapshot is a
+    # pre-command value (e.g. the old disc number). Once a real update
+    # arrives whose state matches the optimistic target, manager.status()
+    # must start reflecting that update's OTHER fields too (e.g. disc) —
+    # not keep re-serving the stale pre-command snapshot for the rest of
+    # the confirmation window.
+    fake = FakePlayer()
+    manager = CDPlayerManager(player=fake, confirmation_window_s=0.5)
+
+    await manager.select_disc(3)
+    assert manager.status()["state"] == "changing"
+    assert manager.status()["disc"] == 1  # snapshot taken before the command ran
+
+    # Real update arrives confirming the "changing" state, with the disc
+    # field now reflecting the actual new value.
+    await fake._emit("changing", disc=3)
+
+    # Still within the confirmation window.
+    assert manager.status()["state"] == "changing"
+    assert manager.status()["disc"] == 3  # must be refreshed, not the stale pre-command value
 
 
 async def test_power_on_and_off_broadcast_expected_states():

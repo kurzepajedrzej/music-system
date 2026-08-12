@@ -82,13 +82,19 @@ class CDPlayerManager:
                 # waiting to see confirmed — could be a stale snapshot from
                 # before this (or an even earlier) command. Drop it.
                 return
-            # else: matches and window hasn't elapsed — almost certainly the
-            # genuine confirmation, so broadcast it, but deliberately don't
-            # null _optimistic_status here. Keep the filter armed against
-            # this same target value for the rest of the window, so a
-            # DIFFERENT stale update arriving later in the same window
-            # still gets filtered instead of being trusted just because
-            # some earlier update happened to match once.
+            else:
+                # Matches and window hasn't elapsed — almost certainly the
+                # genuine confirmation. Refresh the optimistic snapshot's
+                # companion fields (e.g. disc, track) to this real update's
+                # values, since _issue() only captured a pre-command
+                # snapshot for them. Keep "state" pinned to the optimistic
+                # target rather than this update's state (they're equal
+                # here anyway) so the filter stays armed against the same
+                # target value for the rest of the window — a DIFFERENT
+                # stale update arriving later in the same window still gets
+                # filtered instead of being trusted just because some
+                # earlier update happened to match once.
+                self._optimistic_status = {**status, "state": self._optimistic_status["state"]}
         await self._broadcast(status)
 
     async def _issue(self, command_fn, optimistic_state: str) -> None:

@@ -61,7 +61,7 @@ async def test_select_disc_resets_playback():
 
     assert player.track == 1
     assert player.elapsed == 0.0
-    assert player.state == State.STOPPED
+    assert player.state == State.CHANGING  # matches SerialController, not a stopped playback state
 
 
 async def test_disc_next_and_prev_reset_playback():
@@ -70,10 +70,83 @@ async def test_disc_next_and_prev_reset_playback():
 
     await player.disc_next()
     assert player.track == 1
+    assert player.state == State.CHANGING
 
     player.track = 7
     await player.disc_prev()
     assert player.track == 1
+    assert player.state == State.CHANGING
+
+
+async def test_disc_starts_at_1():
+    player = MockPlayer()
+    assert player.disc == 1
+    assert player.status()["disc"] == 1
+
+
+async def test_select_disc_sets_disc_number():
+    player = MockPlayer()
+
+    await player.select_disc(4)
+
+    assert player.disc == 4
+    assert player.status()["disc"] == 4
+
+
+async def test_disc_next_increments_within_range():
+    player = MockPlayer()
+    player.disc = 2
+
+    await player.disc_next()
+
+    assert player.disc == 3
+
+
+async def test_disc_next_wraps_from_5_to_1():
+    player = MockPlayer()
+    player.disc = 5
+
+    await player.disc_next()
+
+    assert player.disc == 1
+
+
+async def test_disc_prev_decrements_within_range():
+    player = MockPlayer()
+    player.disc = 3
+
+    await player.disc_prev()
+
+    assert player.disc == 2
+
+
+async def test_disc_prev_wraps_from_1_to_5():
+    player = MockPlayer()
+    player.disc = 1
+
+    await player.disc_prev()
+
+    assert player.disc == 5
+
+
+async def test_open_close_resets_disc_to_1():
+    player = MockPlayer()
+    player.disc = 3
+
+    await player.open_close()
+
+    assert player.disc == 1
+
+
+async def test_power_on_and_off_do_not_change_disc():
+    player = MockPlayer()
+    player.disc = 4
+
+    await player.power_off()
+    assert player.disc == 4
+
+    await player.power_on()
+    assert player.disc == 4
 
 
 async def test_toggle_repeat_and_random_do_not_raise():
