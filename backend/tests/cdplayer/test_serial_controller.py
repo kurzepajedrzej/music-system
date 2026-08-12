@@ -330,6 +330,85 @@ async def test_disc_next_and_disc_prev_send_correct_bytes():
     assert controller._state == "changing"
 
 
+async def test_disc_starts_at_1():
+    controller = SerialController()
+    assert controller._disc == 1
+    assert controller.status()["disc"] == 1
+
+
+async def test_select_disc_sets_disc_number():
+    controller = SerialController()
+    controller._conn = FakeSerial()
+
+    for n in [1, 2, 3, 4, 5]:
+        controller._disc = 99  # force a change so each assertion is meaningful
+        await controller.select_disc(n)
+        assert controller._disc == n
+        assert controller.status()["disc"] == n
+
+
+async def test_disc_next_increments_within_range():
+    controller = SerialController()
+    controller._conn = FakeSerial()
+    controller._disc = 2
+
+    await controller.disc_next()
+
+    assert controller._disc == 3
+
+
+async def test_disc_next_wraps_from_5_to_1():
+    controller = SerialController()
+    controller._conn = FakeSerial()
+    controller._disc = 5
+
+    await controller.disc_next()
+
+    assert controller._disc == 1
+
+
+async def test_disc_prev_decrements_within_range():
+    controller = SerialController()
+    controller._conn = FakeSerial()
+    controller._disc = 3
+
+    await controller.disc_prev()
+
+    assert controller._disc == 2
+
+
+async def test_disc_prev_wraps_from_1_to_5():
+    controller = SerialController()
+    controller._conn = FakeSerial()
+    controller._disc = 1
+
+    await controller.disc_prev()
+
+    assert controller._disc == 5
+
+
+async def test_open_close_resets_disc_to_1():
+    controller = SerialController()
+    controller._conn = FakeSerial()
+    controller._disc = 4
+
+    await controller.open_close()
+
+    assert controller._disc == 1
+
+
+async def test_power_on_and_off_do_not_change_disc():
+    controller = SerialController()
+    controller._conn = FakeSerial()
+    controller._disc = 3
+
+    await controller.power_off()
+    assert controller._disc == 3
+
+    await controller.power_on()
+    assert controller._disc == 3
+
+
 async def test_toggle_repeat_and_random_send_correct_bytes_without_changing_state():
     controller = SerialController()
     controller._conn = FakeSerial()
