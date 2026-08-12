@@ -61,7 +61,7 @@ async def test_select_disc_resets_playback():
 
     assert player.track == 1
     assert player.elapsed == 0.0
-    assert player.state == State.STOPPED
+    assert player.state == State.CHANGING  # matches SerialController, not a stopped playback state
 
 
 async def test_disc_next_and_prev_reset_playback():
@@ -70,10 +70,12 @@ async def test_disc_next_and_prev_reset_playback():
 
     await player.disc_next()
     assert player.track == 1
+    assert player.state == State.CHANGING
 
     player.track = 7
     await player.disc_prev()
     assert player.track == 1
+    assert player.state == State.CHANGING
 
 
 async def test_disc_starts_at_1():

@@ -101,10 +101,15 @@ class MockPlayer:
         # (MOCK_TRACKS) — which disc number was requested doesn't change
         # playback data, but it's still tracked so the "current disc"
         # label behaves the same way it does against real hardware.
+        # State goes to CHANGING (not STOPPED) to match SerialController,
+        # which CDPlayerManager.select_disc() optimistically assumes —
+        # otherwise the mock's real update never matches the optimistic
+        # "changing" target and gets dropped for the whole confirmation
+        # window, making mock/dev mode behave differently from hardware.
         self.disc = n
         self.track = 1
         self.elapsed = 0.0
-        self.state = State.STOPPED
+        self.state = State.CHANGING
         await self._notify()
 
     async def disc_next(self) -> None:
