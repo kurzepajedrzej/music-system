@@ -117,9 +117,6 @@ export default function CdControls({ disabled }: { disabled: boolean }) {
       {expanded && (
         <div className="w-full flex flex-col gap-4 pt-1">
           <div>
-            {/* Real hardware doesn't report which disc is currently loaded
-                (only the track within it), so unlike Power there's no way
-                to highlight the active one here. */}
             <p className="text-xs font-semibold uppercase tracking-widest text-ink-muted mb-2">Disc</p>
             <div className="flex gap-2">
               {[1, 2, 3, 4, 5].map((n) => (
@@ -127,7 +124,9 @@ export default function CdControls({ disabled }: { disabled: boolean }) {
                   key={n}
                   onClick={() => run(`disc-${n}`, () => selectCdDisc(n))}
                   disabled={busy}
-                  className="flex-1 h-10 rounded-lg bg-base-800 text-ink-muted hover:text-ink transition-colors disabled:opacity-40 text-sm font-medium"
+                  className={`flex-1 h-10 rounded-lg transition-colors disabled:opacity-40 text-sm font-medium ${
+                    cd?.disc === n ? 'bg-accent text-base-950' : 'bg-base-800 text-ink-muted hover:text-ink'
+                  }`}
                 >
                   {n}
                 </button>
