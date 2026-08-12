@@ -97,6 +97,7 @@ class SerialController:
         self._state: str = "stopped"
         self._disc_present: bool = True
         self._track: int = 1
+        self._disc: int = 1
 
         self._listeners: list[Callable] = []
         self._poll_task: asyncio.Task | None = None
@@ -201,6 +202,7 @@ class SerialController:
             "state": self._state,
             "disc_present": self._disc_present,
             "track": self._track,
+            "disc": self._disc,
             "total_tracks": 0,
             "elapsed_seconds": 0,
             "track_duration_seconds": 0,
@@ -238,24 +240,28 @@ class SerialController:
 
     async def open_close(self) -> None:
         await self._send_locked(CDC600Commands.OPEN_CLOSE)
+        self._disc = 1
         self._track = 1
         self._state = "changing"
         await self._notify()
 
     async def select_disc(self, n: int) -> None:
         await self._send_locked(CDC600Commands.DISC_SELECT[n])
+        self._disc = n
         self._track = 1
         self._state = "changing"
         await self._notify()
 
     async def disc_next(self) -> None:
         await self._send_locked(CDC600Commands.DISC_NEXT)
+        self._disc = self._disc % 5 + 1
         self._track = 1
         self._state = "changing"
         await self._notify()
 
     async def disc_prev(self) -> None:
         await self._send_locked(CDC600Commands.DISC_PREV)
+        self._disc = (self._disc - 2) % 5 + 1
         self._track = 1
         self._state = "changing"
         await self._notify()
