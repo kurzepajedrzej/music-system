@@ -21,15 +21,20 @@ class FakeSerial:
         self.is_open = True
         self.writes = []
         self.read_log = []
+        self.event_log = []
         self._to_read = [b""]
 
     def write(self, data):
         time.sleep(0.02)
         self.writes.append(data)
+        self.event_log.append(("write", data))
 
     def read(self, n):
         time.sleep(0.02)
         return self._to_read.pop(0) if self._to_read else b""
+
+    def reset_input_buffer(self):
+        self.event_log.append(("reset", None))
 
     def close(self):
         self.is_open = False
@@ -455,3 +460,21 @@ async def test_power_on_and_off_send_correct_bytes_and_set_state():
     await controller.power_on()
     assert controller._conn.writes[-1] == bytes([0x02]) + b"0797E" + bytes([0x03])
     assert controller._state == "changing"
+
+
+def test_query_status_flushes_input_buffer_before_querying():
+    # Fire-and-forget commands (power_on, select_disc, etc.) never read back
+    # their own response frame, leaving it sitting in the OS input buffer.
+    # Without a flush here, _poll_loop's next STATUS query can read that
+    # leftover frame instead of the real answer to its own query, corrupting
+    # self._state with stale data. Flushing right before the query removes
+    # that leftover before the read, so this poll only ever sees the true,
+    # current response to the query it just sent.
+    controller = SerialController()
+    controller._conn = FakeSerial()
+
+    controller._query_status_sync()
+
+    kinds = [kind for kind, _ in controller._conn.event_log]
+    assert "reset" in kinds
+    assert kinds.index("reset") < kinds.index("write")
