@@ -158,6 +158,7 @@ class SerialController:
 
     def _query_status_sync(self) -> str | None:
         try:
+            self._conn.reset_input_buffer()
             self._send(CDC600Commands.STATUS)
             raw = self._read_until_etx()
             return _parse_state(raw)
