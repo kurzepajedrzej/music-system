@@ -128,7 +128,7 @@ async def test_connect_failure_marks_degraded_instead_of_raising():
         def connect(self):
             raise RuntimeError("no such device")
 
-    manager = CDPlayerManager(player=FailingPlayer(), use_mock=False, reconnect_interval=0.01)
+    manager = CDPlayerManager(player=FailingPlayer(), reconnect_interval=0.01)
     await manager.connect()  # must not raise
     assert manager.status()["degraded"] is True
 
