@@ -4,7 +4,6 @@ import time
 from typing import Callable
 
 from app import config
-from app.cdplayer.mock_player import MockPlayer
 from app.cdplayer.serial_controller import SerialController
 
 log = logging.getLogger(__name__)
@@ -16,13 +15,11 @@ class CDPlayerManager:
     def __init__(
         self,
         player=None,
-        use_mock: bool | None = None,
         serial_port: str = "/dev/ttyUSB0",
         reconnect_interval: float = 30.0,
         confirmation_window_s: float = CONFIRMATION_WINDOW_S,
     ):
-        self._use_mock = config.USE_MOCK if use_mock is None else use_mock
-        self._player = player or (MockPlayer() if self._use_mock else SerialController(port=serial_port))
+        self._player = player or SerialController(port=serial_port)
         self._listeners: list[Callable] = []
         self._degraded = False
         self._reconnect_interval = reconnect_interval
@@ -34,8 +31,6 @@ class CDPlayerManager:
         self._player.subscribe(self._on_player_update)
 
     async def connect(self) -> None:
-        if self._use_mock:
-            return
         try:
             self._player.connect()
             self._degraded = False
@@ -45,7 +40,7 @@ class CDPlayerManager:
             asyncio.create_task(self._reconnect_loop())
 
     async def disconnect(self) -> None:
-        if not self._use_mock and hasattr(self._player, "disconnect"):
+        if hasattr(self._player, "disconnect"):
             self._player.disconnect()
 
     async def _reconnect_loop(self) -> None:
@@ -166,4 +161,4 @@ class CDPlayerManager:
         return {**base, "degraded": self._degraded}
 
 
-manager = CDPlayerManager(use_mock=config.USE_MOCK, serial_port=config.SERIAL_PORT)
+manager = CDPlayerManager(serial_port=config.SERIAL_PORT)
