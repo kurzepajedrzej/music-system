@@ -83,20 +83,20 @@ def test_first_broadcast_on_connect_reflects_real_cd_state_not_a_placeholder():
     manager._optimistic_issued_at = 0.0
 
     original_player = manager._player
-    real_player = _FakeCdPlayerForWs()
-    manager._player = real_player
-    real_player.disc_present = True
-    real_player.track = 4
+    fake_player = _FakeCdPlayerForWs()
+    manager._player = fake_player
+    fake_player.disc_present = True
+    fake_player.track = 4
 
-    live_status = manager.status()
-    # Sanity check: this genuinely differs from the old hardcoded placeholder
-    # (disc_present: False, track: 0, total_tracks: 0), otherwise the
-    # assertion below would pass vacuously even against the old buggy code.
-    assert live_status["disc_present"] is True
-    assert live_status["track"] == 4
-
-    client = TestClient(app)
     try:
+        live_status = manager.status()
+        # Sanity check: this genuinely differs from the old hardcoded placeholder
+        # (disc_present: False, track: 0, total_tracks: 0), otherwise the
+        # assertion below would pass vacuously even against the old buggy code.
+        assert live_status["disc_present"] is True
+        assert live_status["track"] == 4
+
+        client = TestClient(app)
         with client.websocket_connect("/api/ws") as ws:
             first_frame = ws.receive_json()
             assert first_frame["type"] == "state"
