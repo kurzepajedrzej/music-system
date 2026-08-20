@@ -1,8 +1,81 @@
 # tests/routers/test_cd.py
+import pytest
 from fastapi.testclient import TestClient
 
 from app.cdplayer.manager import manager
 from app.main import app
+
+
+class FakeCdPlayer:
+    def __init__(self):
+        self._state = "stopped"
+        self._disc = 1
+
+    def subscribe(self, cb):
+        pass
+
+    def status(self):
+        return {"state": self._state, "disc_present": True, "track": 1,
+                "total_tracks": 10, "elapsed_seconds": 0, "track_duration_seconds": 200,
+                "disc": self._disc}
+
+    async def play(self):
+        self._state = "playing"
+
+    async def pause(self):
+        self._state = "paused"
+
+    async def stop(self):
+        self._state = "stopped"
+
+    async def next_track(self):
+        pass
+
+    async def prev_track(self):
+        pass
+
+    async def open_close(self):
+        pass
+
+    async def select_disc(self, n):
+        self._disc = n
+
+    async def disc_next(self):
+        pass
+
+    async def disc_prev(self):
+        pass
+
+    async def toggle_repeat(self):
+        pass
+
+    async def toggle_random(self):
+        pass
+
+    async def search_forward(self):
+        pass
+
+    async def search_backward(self):
+        pass
+
+    async def select_track(self, n):
+        pass
+
+    async def power_on(self):
+        self._state = "changing"
+
+    async def power_off(self):
+        self._state = "powered_off"
+
+
+@pytest.fixture(autouse=True)
+def fake_cd_player():
+    original = manager._player
+    manager._player = FakeCdPlayer()
+    manager._optimistic_status = None
+    yield
+    manager._player = original
+
 
 client = TestClient(app)
 
