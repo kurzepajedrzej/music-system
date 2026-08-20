@@ -10,6 +10,16 @@ from app.main import app
 from app.ws import unified
 
 
+class _FakeCdPlayerForWs:
+    def __init__(self):
+        self.disc_present = False
+        self.track = 0
+
+    def status(self):
+        return {"state": "stopped", "disc_present": self.disc_present, "track": self.track,
+                "total_tracks": 10, "elapsed_seconds": 0, "track_duration_seconds": 200, "disc": 1}
+
+
 @respx.mock
 def test_ticker_only_runs_with_connected_clients():
     respx.get(f"{config.OWNTONE_URL}/api/player").mock(
@@ -72,7 +82,9 @@ def test_first_broadcast_on_connect_reflects_real_cd_state_not_a_placeholder():
     manager._optimistic_status = None
     manager._optimistic_issued_at = 0.0
 
-    real_player = manager._player
+    original_player = manager._player
+    real_player = _FakeCdPlayerForWs()
+    manager._player = real_player
     real_player.disc_present = True
     real_player.track = 4
 
@@ -90,8 +102,7 @@ def test_first_broadcast_on_connect_reflects_real_cd_state_not_a_placeholder():
             assert first_frame["type"] == "state"
             assert first_frame["cd"] == live_status
     finally:
-        real_player.disc_present = True
-        real_player.track = 1
+        manager._player = original_player
         unified._clients.clear()
 
 
