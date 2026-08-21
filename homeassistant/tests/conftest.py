@@ -1,7 +1,7 @@
 """Shared fixtures for the music_system integration test suite."""
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -11,6 +11,14 @@ pytest_plugins = "pytest_homeassistant_custom_component"
 @pytest.fixture(autouse=True)
 def auto_enable_custom_integrations(enable_custom_integrations):
     yield
+
+
+@pytest.fixture
+def mock_hub_methods():
+    """Mock hub async_start/async_stop to prevent real socket connections."""
+    with patch("custom_components.music_system.hub.MusicSystemHub.async_start", new=AsyncMock()):
+        with patch("custom_components.music_system.hub.MusicSystemHub.async_stop", new=AsyncMock()):
+            yield
 
 
 class FakeHub:
