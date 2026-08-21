@@ -87,7 +87,7 @@ of whether it's currently the audible source.
 
 | Entity | Type | Backend call |
 |---|---|---|
-| `media_player.yamaha_cdc600` | media_player | play/pause/stop/next/prev → `PUT /api/cd/{cmd}`; `source_list` = `Disc 1`..`Disc 5` → `POST /api/cd/disc/{n}` |
+| `media_player.yamaha_cdc600` | media_player | play/pause/stop/next/prev → `POST /api/cd/{cmd}`; `source_list` = `Disc 1`..`Disc 5` → `POST /api/cd/disc/{n}` |
 | `switch.yamaha_cdc600_power` | switch | `POST /api/cd/power-on` / `POST /api/cd/power-off` |
 | `button.yamaha_cdc600_toggle_repeat` | button | `POST /api/cd/repeat` |
 | `button.yamaha_cdc600_toggle_random` | button | `POST /api/cd/random` |
