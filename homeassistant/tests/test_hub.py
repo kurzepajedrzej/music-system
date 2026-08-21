@@ -46,7 +46,7 @@ class FakeSession:
     def __init__(self, ws_queue: list[object]) -> None:
         self._ws_queue = list(ws_queue)
 
-    def ws_connect(self, url: str) -> FakeWs:
+    def ws_connect(self, url: str, **kwargs: object) -> FakeWs:
         if not self._ws_queue:
             return FakeWs([])  # scripted queue exhausted: keep behaving like a clean immediate close
         item = self._ws_queue.pop(0)
@@ -168,6 +168,45 @@ async def test_reconnects_after_drop_and_processes_next_connection():
         assert hub.state["cd"]["state"] == "playing"
     finally:
         await hub.async_stop()
+
+
+async def test_cd_message_preserves_degraded_flag_when_absent():
+    api = make_api({"player": None, "queue": [], "currentTrack": None, "cd": {"state": "playing", "degraded": True}})
+    cd_msg = FakeMsg("TEXT", data='{"type": "cd", "cd": {"state": "changing"}}')
+    session = FakeSession([FakeWs([cd_msg])])
+    hub = MusicSystemHub(asyncio.get_running_loop(), session, api, reconnect_delay=1000, unavailable_after=1000)
+
+    await hub.async_start()
+    await asyncio.sleep(0.05)
+
+    assert hub.state["cd"]["state"] == "changing"
+    assert hub.state["cd"]["degraded"] is True
+    await hub.async_stop()
+
+
+async def test_notify_survives_raising_listener():
+    api = make_api()
+    cd_msg = FakeMsg("TEXT", data='{"type": "cd", "cd": {"state": "playing"}}')
+    session = FakeSession([FakeWs([cd_msg])])
+    hub = MusicSystemHub(asyncio.get_running_loop(), session, api, reconnect_delay=1000, unavailable_after=1000)
+
+    def raising_listener() -> None:
+        raise RuntimeError("boom")
+
+    hub.add_listener(raising_listener)
+
+    await hub.async_start()
+    await asyncio.sleep(0.05)
+
+    # The raising listener must not have killed the WS loop task.
+    assert hub._ws_task is not None
+    assert not hub._ws_task.done()
+
+    # A subsequent message should still be processed normally.
+    assert hub.state["cd"]["state"] == "playing"
+
+    # Clean shutdown must complete without raising.
+    await hub.async_stop()
 
 
 async def test_becomes_unavailable_after_grace_period_without_reconnect():

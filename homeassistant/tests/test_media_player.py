@@ -138,3 +138,31 @@ def test_music_system_volume_level_converts_from_percent(fake_hub):
     fake_hub.state["player"] = {"state": "play", "volume": 50}
     entity = MusicSystemMediaPlayer(fake_hub, "entry123")
     assert entity.volume_level == 0.5
+
+
+def test_music_system_media_image_url_when_streaming(fake_hub):
+    fake_hub.api.base_url = "http://192.168.1.199:3000"
+    fake_hub.state["currentTrack"] = {"data_kind": "file", "id": 42, "title": "Track A"}
+    entity = MusicSystemMediaPlayer(fake_hub, "entry123")
+    assert entity.media_image_url == "http://192.168.1.199:3000/api/artwork/item/42"
+
+
+def test_music_system_media_image_url_none_when_cd_source(fake_hub):
+    fake_hub.api.base_url = "http://192.168.1.199:3000"
+    fake_hub.state["currentTrack"] = {"data_kind": "pipe"}
+    entity = MusicSystemMediaPlayer(fake_hub, "entry123")
+    assert entity.media_image_url is None
+
+
+def test_music_system_media_image_url_none_when_no_current_track(fake_hub):
+    fake_hub.api.base_url = "http://192.168.1.199:3000"
+    fake_hub.state["currentTrack"] = None
+    entity = MusicSystemMediaPlayer(fake_hub, "entry123")
+    assert entity.media_image_url is None
+
+
+def test_music_system_media_image_url_none_when_track_has_no_id(fake_hub):
+    fake_hub.api.base_url = "http://192.168.1.199:3000"
+    fake_hub.state["currentTrack"] = {"data_kind": "file", "title": "Track A"}
+    entity = MusicSystemMediaPlayer(fake_hub, "entry123")
+    assert entity.media_image_url is None

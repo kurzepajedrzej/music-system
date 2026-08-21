@@ -150,6 +150,15 @@ class MusicSystemMediaPlayer(MusicSystemEntity, MediaPlayerEntity):
         return track.get("artist") if track else None
 
     @property
+    def media_image_url(self) -> str | None:
+        if self._is_cd:
+            return None
+        track = self._hub.state.get("currentTrack")
+        if not track or track.get("id") is None:
+            return None
+        return f"{self._hub.api.base_url}/api/artwork/item/{track['id']}"
+
+    @property
     def volume_level(self) -> float | None:
         player = self._hub.state.get("player") or {}
         volume = player.get("volume")
