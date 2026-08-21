@@ -126,6 +126,22 @@ async def test_tick_message_updates_player_progress_in_place():
     await hub.async_stop()
 
 
+async def test_hub_survives_malformed_json_message():
+    api = make_api()
+    # Send malformed JSON followed by a valid message to prove the hub survives
+    malformed_msg = FakeMsg("TEXT", data='not valid json{')
+    valid_msg = FakeMsg("TEXT", data='{"type": "cd", "cd": {"state": "playing"}}')
+    session = FakeSession([FakeWs([malformed_msg, valid_msg])])
+    hub = MusicSystemHub(asyncio.get_running_loop(), session, api, reconnect_delay=1000, unavailable_after=1000)
+
+    await hub.async_start()
+    await asyncio.sleep(0.05)
+
+    # Hub should have survived the malformed message and processed the valid one
+    assert hub.state["cd"]["state"] == "playing"
+    await hub.async_stop()
+
+
 async def test_reconnects_after_drop_and_processes_next_connection():
     api = make_api()
     first = FakeWs([])

@@ -100,7 +100,10 @@ class MusicSystemHub:
                     await self._on_connected_async()
                     async for msg in ws:
                         if msg.type == aiohttp.WSMsgType.TEXT:
-                            self._handle_message(json.loads(msg.data))
+                            try:
+                                self._handle_message(json.loads(msg.data))
+                            except Exception as err:  # noqa: BLE001 - a malformed frame must not kill the hub
+                                _LOGGER.warning("Failed to process WebSocket message: %s", err)
                         elif msg.type in (
                             aiohttp.WSMsgType.ERROR,
                             aiohttp.WSMsgType.CLOSED,
