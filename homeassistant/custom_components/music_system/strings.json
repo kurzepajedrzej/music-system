@@ -1,0 +1,18 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "data": {
+          "host": "Host",
+          "port": "Port"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not reach the music-system backend at that address."
+    },
+    "abort": {
+      "already_configured": "This music-system backend is already configured."
+    }
+  }
+}
