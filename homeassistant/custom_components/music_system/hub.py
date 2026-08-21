@@ -59,7 +59,10 @@ class MusicSystemHub:
 
     def _notify(self) -> None:
         for callback in list(self._listeners):
-            callback()
+            try:
+                callback()
+            except Exception:  # noqa: BLE001 - one bad listener must not kill the caller
+                _LOGGER.exception("Error notifying a music_system listener")
 
     async def async_start(self) -> None:
         self._stopped = False
@@ -96,7 +99,7 @@ class MusicSystemHub:
     async def _ws_loop(self) -> None:
         while not self._stopped:
             try:
-                async with self._session.ws_connect(self.api.ws_url) as ws:
+                async with self._session.ws_connect(self.api.ws_url, heartbeat=30) as ws:
                     await self._on_connected_async()
                     async for msg in ws:
                         if msg.type == aiohttp.WSMsgType.TEXT:
@@ -112,6 +115,8 @@ class MusicSystemHub:
                             break
             except (aiohttp.ClientError, OSError) as err:
                 _LOGGER.debug("WebSocket connection error: %s", err)
+            except Exception:  # noqa: BLE001 - any unexpected error must route through reconnect, not kill the loop
+                _LOGGER.exception("Unexpected error in WebSocket loop")
             if self._stopped:
                 return
             self._on_disconnected()
@@ -150,7 +155,11 @@ class MusicSystemHub:
                 "cd": msg.get("cd"),
             }
         elif msg_type == "cd":
-            self.state["cd"] = msg.get("cd")
+            incoming = msg.get("cd") or {}
+            prev = self.state.get("cd") or {}
+            if "degraded" not in incoming and "degraded" in prev:
+                incoming = {**incoming, "degraded": prev["degraded"]}
+            self.state["cd"] = incoming
         elif msg_type == "tick":
             player = self.state.get("player")
             if player is not None:
