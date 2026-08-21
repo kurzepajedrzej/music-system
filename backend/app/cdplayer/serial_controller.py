@@ -102,7 +102,18 @@ class SerialController:
         self._listeners: list[Callable] = []
         self._poll_task: asyncio.Task | None = None
 
-    def connect(self) -> None:
+    async def connect(self) -> None:
+        # _connect_blocking does real blocking I/O (port open, a settle
+        # sleep, and up to 5 handshake round-trips each with a 1s serial
+        # read timeout -- up to ~5s total). It must run off the event loop
+        # thread so a slow/unresponsive CD player only stalls this connect
+        # attempt, not every request the backend is serving concurrently.
+        # asyncio.create_task, however, needs a running loop in the calling
+        # thread, so it stays out here rather than inside the threaded call.
+        await asyncio.to_thread(self._connect_blocking)
+        self._poll_task = asyncio.create_task(self._poll_loop())
+
+    def _connect_blocking(self) -> None:
         self._conn = serial.Serial(
             port=self._port,
             baudrate=self._baud,
@@ -121,7 +132,6 @@ class SerialController:
         self._conn.rts = True
         time.sleep(0.2)
         self._handshake()
-        self._poll_task = asyncio.create_task(self._poll_loop())
 
     def disconnect(self) -> None:
         if self._poll_task and not self._poll_task.done():

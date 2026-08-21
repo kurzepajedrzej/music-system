@@ -160,7 +160,7 @@ async def test_connect_raises_dtr_and_rts(monkeypatch):
     monkeypatch.setattr(sc_module.serial, "Serial", lambda **kwargs: fake)
 
     controller = SerialController()
-    controller.connect()
+    await controller.connect()
     try:
         assert fake.dtr is True
         assert fake.rts is True
@@ -181,7 +181,7 @@ async def test_connect_settles_dtr_rts_before_first_write(monkeypatch):
     monkeypatch.setattr(sc_module.time, "sleep", tracking_sleep)
 
     controller = SerialController()
-    controller.connect()
+    await controller.connect()
     try:
         assert any(s >= 0.2 for s in sleep_calls)
 
@@ -192,6 +192,34 @@ async def test_connect_settles_dtr_rts_before_first_write(monkeypatch):
         assert "sleep" in kinds[:first_write]
     finally:
         controller.disconnect()
+
+
+async def test_connect_does_not_block_event_loop(monkeypatch):
+    # _connect_blocking's DTR/RTS settle does a real time.sleep(0.2), and a
+    # slow/quiet real handshake can add several more seconds (5 attempts x
+    # up to 1s read timeout each). connect() must run this off the event
+    # loop thread so a slow CD player only stalls this connect() call, not
+    # every other request the backend is serving concurrently.
+    fake = FakeSerialForConnect()
+    monkeypatch.setattr(sc_module.serial, "Serial", lambda **kwargs: fake)
+
+    controller = SerialController()
+    ticks = 0
+
+    async def ticker():
+        nonlocal ticks
+        while True:
+            await asyncio.sleep(0.02)
+            ticks += 1
+
+    ticker_task = asyncio.create_task(ticker())
+    await controller.connect()
+    ticker_task.cancel()
+    controller.disconnect()
+
+    # The settle delay alone is a real 0.2s blocking sleep. If connect() had
+    # blocked the event loop, the ticker couldn't have ticked during it.
+    assert ticks >= 5
 
 
 # ── _parse_state(): structural framing, not substring search ───────────────
