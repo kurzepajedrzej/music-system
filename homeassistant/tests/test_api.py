@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import aiohttp
 import pytest
+import yarl
 from aioresponses import aioresponses
 
 from custom_components.music_system.api import MusicSystemApiClient, MusicSystemApiError
@@ -75,8 +76,9 @@ async def test_async_player_set_volume_sends_json_body(mock_aioresponse):
     async with aiohttp.ClientSession() as session:
         client = MusicSystemApiClient(session, "192.168.1.199", 3000)
         mock_aioresponse.put("http://192.168.1.199:3000/api/player/volume", payload={"ok": True})
-        # Just verify the call succeeds - the mock will only match if the correct method and path are used
         await client.async_player_set_volume(42)
+        request = mock_aioresponse.requests[("PUT", yarl.URL("http://192.168.1.199:3000/api/player/volume"))][0]
+        assert request.kwargs["json"] == {"volume": 42}
 
 
 async def test_async_source_cd_and_library_post_to_correct_paths(mock_aioresponse):
