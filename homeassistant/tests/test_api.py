@@ -11,8 +11,26 @@ from custom_components.music_system.api import MusicSystemApiClient, MusicSystem
 
 @pytest.fixture
 def mock_aioresponse():
-    with aioresponses() as m:
-        yield m
+    # aioresponses 0.7.6-0.7.9 (latest on PyPI as of 2026-08) don't pass
+    # `stream_writer` to ClientResponse.__init__, which aiohttp 3.14+
+    # requires as a keyword-only argument. Patch it for the duration of
+    # this fixture only — scoped and torn down, not global — so it can't
+    # mask bugs in unrelated tests. Safe to remove once aioresponses ships
+    # a fix for aiohttp>=3.14 (upstream issue, not our bug).
+    import aiohttp.client_reqrep
+    from unittest.mock import Mock
+
+    original_init = aiohttp.client_reqrep.ClientResponse.__init__
+
+    def patched_init(self, method, url, *, stream_writer=None, **kwargs):
+        original_init(self, method, url, stream_writer=stream_writer or Mock(), **kwargs)
+
+    aiohttp.client_reqrep.ClientResponse.__init__ = patched_init
+    try:
+        with aioresponses() as m:
+            yield m
+    finally:
+        aiohttp.client_reqrep.ClientResponse.__init__ = original_init
 
 
 def test_ws_url_derives_from_host_and_port():
