@@ -136,14 +136,22 @@ async def test_reconnects_after_drop_and_processes_next_connection():
 
     try:
         await hub.async_start()
-        await asyncio.sleep(0.1)
+        # Poll for the condition and stop the instant it's true, rather than
+        # sleeping a fixed duration — the hub keeps reconnecting (and
+        # resyncing) after this point since FakeSession degrades to empty
+        # connections once its scripted queue is exhausted, and each of
+        # those resyncs overwrites state with the mock's static snapshot.
+        # Stopping immediately keeps the race window to ~1ms instead of
+        # racing it against a 100ms sleep.
+        for _ in range(50):
+            cd = hub.state.get("cd")
+            if cd is not None and cd.get("state") == "playing":
+                break
+            await asyncio.sleep(0.01)
 
-        await hub.async_stop()
         assert hub.state["cd"]["state"] == "playing"
     finally:
-        # Ensure cleanup even if assertion fails
-        if not hub._stopped:
-            await hub.async_stop()
+        await hub.async_stop()
 
 
 async def test_becomes_unavailable_after_grace_period_without_reconnect():
