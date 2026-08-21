@@ -47,6 +47,8 @@ class FakeSession:
         self._ws_queue = list(ws_queue)
 
     def ws_connect(self, url: str) -> FakeWs:
+        if not self._ws_queue:
+            return FakeWs([])  # scripted queue exhausted: keep behaving like a clean immediate close
         item = self._ws_queue.pop(0)
         if isinstance(item, Exception):
             raise item
@@ -132,11 +134,16 @@ async def test_reconnects_after_drop_and_processes_next_connection():
     session = FakeSession([first, second])
     hub = MusicSystemHub(asyncio.get_running_loop(), session, api, reconnect_delay=0.01, unavailable_after=1000)
 
-    await hub.async_start()
-    await asyncio.sleep(0.1)
+    try:
+        await hub.async_start()
+        await asyncio.sleep(0.1)
 
-    assert hub.state["cd"]["state"] == "playing"
-    await hub.async_stop()
+        await hub.async_stop()
+        assert hub.state["cd"]["state"] == "playing"
+    finally:
+        # Ensure cleanup even if assertion fails
+        if not hub._stopped:
+            await hub.async_stop()
 
 
 async def test_becomes_unavailable_after_grace_period_without_reconnect():

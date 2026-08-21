@@ -107,7 +107,7 @@ class MusicSystemHub:
                             aiohttp.WSMsgType.CLOSING,
                         ):
                             break
-            except (aiohttp.ClientError, OSError, IndexError) as err:
+            except (aiohttp.ClientError, OSError) as err:
                 _LOGGER.debug("WebSocket connection error: %s", err)
             if self._stopped:
                 return
