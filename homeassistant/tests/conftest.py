@@ -15,10 +15,16 @@ def auto_enable_custom_integrations(enable_custom_integrations):
 
 @pytest.fixture
 def mock_hub_methods():
-    """Mock hub async_start/async_stop to prevent real socket connections."""
-    with patch("custom_components.music_system.hub.MusicSystemHub.async_start", new=AsyncMock()):
-        with patch("custom_components.music_system.hub.MusicSystemHub.async_stop", new=AsyncMock()):
-            yield
+    """Mock hub async_start/async_stop and platform forwarding — config
+    flow completion auto-triggers a real async_setup_entry, which would
+    otherwise attempt a real socket connection and log a ModuleNotFoundError
+    for platforms that don't exist until later tasks."""
+    with (
+        patch("custom_components.music_system.hub.MusicSystemHub.async_start", new=AsyncMock()),
+        patch("custom_components.music_system.hub.MusicSystemHub.async_stop", new=AsyncMock()),
+        patch("homeassistant.config_entries.ConfigEntries.async_forward_entry_setups", new=AsyncMock()),
+    ):
+        yield
 
 
 class FakeHub:
