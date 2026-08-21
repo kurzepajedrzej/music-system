@@ -32,7 +32,7 @@ class CDPlayerManager:
 
     async def connect(self) -> None:
         try:
-            self._player.connect()
+            await self._player.connect()
             self._degraded = False
         except Exception as e:
             log.warning("CD player connect failed, starting degraded: %s", e)
@@ -47,7 +47,7 @@ class CDPlayerManager:
         while self._degraded:
             await asyncio.sleep(self._reconnect_interval)
             try:
-                self._player.connect()
+                await self._player.connect()
                 self._degraded = False
                 log.info("CD player reconnected")
             except Exception:
