@@ -74,4 +74,3 @@ isn't implemented yet.
 ```bash
 uv run pytest -v
 ```
-# acceptance-test scratch commit, reverted next step
