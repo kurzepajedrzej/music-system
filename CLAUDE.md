@@ -217,8 +217,12 @@ means it needs a rebuild via `build-image.sh`.
   `network_mode: host` (in `homelab-configs`) and isn't on this repo's
   `music` bridge network, so it can only reach `music-backend` via a
   host-published port, not container-name DNS. `music-backend` is
-  published at `127.0.0.1:3000` (loopback-only, not exposed to the LAN)
-  specifically for this. If the HA integration ever goes unreachable again
+  published at `127.0.0.1:3001` → container port 3000 (loopback-only, not
+  exposed to the LAN) specifically for this. Host port 3001, not 3000 —
+  `adguardhome` (in `homelab-configs`) already owns 3000 on this host for
+  its own setup-wizard UI; the first deploy attempt of this port mapping
+  hit exactly that collision (`Bind for 0.0.0.0:3000 failed: port is
+  already allocated`). If the HA integration ever goes unreachable again
   after a `music-backend` recreation, it's very likely because something
   removed this port mapping — the container's internal bridge IP changes
   on every recreation, which is exactly what broke the integration once

@@ -81,9 +81,11 @@ services:
     # container's internal bridge IP, which changes every time the
     # container is recreated -- exactly what broke the HA integration
     # after the stack split (it was configured with a now-stale IP from
-    # before the split). Bound to 127.0.0.1 only, not the LAN.
+    # before the split). Bound to 127.0.0.1 only, not the LAN. Host port is
+    # 3001, not 3000 -- adguardhome (in homelab-configs) already owns 3000
+    # on this host for its own setup-wizard UI.
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:3001:3000"
     environment:
       - OWNTONE_URL=http://172.17.0.1:3689
       - SERIAL_PORT=/dev/ttyUSB0
