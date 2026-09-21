@@ -212,6 +212,19 @@ means it needs a rebuild via `build-image.sh`.
   or every command fails with "dubious ownership".
 - **macOS `._*` AppleDouble files** litter the repo from past `scp` runs —
   untracked noise, never `git add -A`.
+- **`music-backend`'s address for Home Assistant must be a stable published
+  port, never its bridge-network IP.** The `homeassistant` container runs
+  `network_mode: host` (in `homelab-configs`) and isn't on this repo's
+  `music` bridge network, so it can only reach `music-backend` via a
+  host-published port, not container-name DNS. `music-backend` is
+  published at `127.0.0.1:3000` (loopback-only, not exposed to the LAN)
+  specifically for this. If the HA integration ever goes unreachable again
+  after a `music-backend` recreation, it's very likely because something
+  removed this port mapping — the container's internal bridge IP changes
+  on every recreation, which is exactly what broke the integration once
+  already (it had been configured with a stale IP from before the
+  main/music stack split, since no stable address existed yet at the
+  time).
 - **A missing bind-mount source directory fails silently, not loudly.** If
   `homeassistant/custom_components/music_system` in this repo's checkout
   ever goes missing (moved checkout, rename, bad path), Docker doesn't
