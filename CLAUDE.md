@@ -212,6 +212,16 @@ means it needs a rebuild via `build-image.sh`.
   or every command fails with "dubious ownership".
 - **macOS `._*` AppleDouble files** litter the repo from past `scp` runs —
   untracked noise, never `git add -A`.
+- **A missing bind-mount source directory fails silently, not loudly.** If
+  `homeassistant/custom_components/music_system` in this repo's checkout
+  ever goes missing (moved checkout, rename, bad path), Docker doesn't
+  error on `homelab-configs`' `homeassistant` container — it silently
+  auto-creates an empty directory at the mount point instead. The main
+  stack keeps working fine (blast radius stays contained, as intended), but
+  Home Assistant silently loses the CD-control integration with no startup
+  failure or log line to alert anyone. If the CD entities in Home Assistant
+  go missing, check that this path still exists and is correct before
+  looking anywhere else.
 
 ## Testing
 

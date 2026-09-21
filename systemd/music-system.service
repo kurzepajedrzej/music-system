@@ -1,7 +1,7 @@
 [Unit]
 Description=Music System Docker Services
-After=docker.service network-online.target homelab.service
-Wants=network-online.target
+After=docker.service network-online.target homelab.service dev-ttyUSB0.device
+Wants=network-online.target dev-ttyUSB0.device
 Requires=docker.service
 
 [Service]
