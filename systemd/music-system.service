@@ -1,0 +1,15 @@
+[Unit]
+Description=Music System Docker Services
+After=docker.service network-online.target homelab.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/root/Projects/music-system/startup.sh
+ExecStop=/usr/bin/docker compose -f /root/Projects/music-system/docker-compose.yml --env-file /root/Projects/music-system/versions.env down --timeout 30
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target
