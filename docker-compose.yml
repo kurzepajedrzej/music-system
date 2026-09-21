@@ -1,0 +1,91 @@
+networks:
+  music:
+    driver: bridge
+
+services:
+
+  owntone:
+    image: owntone/owntone:latest
+    container_name: owntone
+    network_mode: host
+    volumes:
+      - ./owntone/owntone.conf:/etc/owntone/owntone.conf:ro
+      - /srv/music:/srv/music
+      - /srv/owntone-cache:/var/cache/owntone
+    restart: unless-stopped
+
+  # audio-capture — captures the Behringer UCA202 line input into behringer.pipe
+  audio-capture:
+    image: alpine:3.21
+    container_name: audio-capture
+    depends_on:
+      - owntone
+    # The arecord invocation must stay on one YAML line (or all continuation
+    # lines at the base line's own indentation) -- indenting the flags
+    # deeper, as this used to, makes YAML's ">" folding treat them as "more
+    # indented" and keep the line breaks literal instead of folding them to
+    # spaces. That broke the flags entirely; now fixed.
+    #
+    # arecord's write to the pipe fails ("Broken pipe") whenever OwnTone
+    # briefly stops reading it (track boundaries, source switches). Without
+    # a retry loop, that kills arecord and the whole container has to
+    # restart via `restart: on-failure` -- reinstalling packages and
+    # reopening the ALSA device from scratch, which produces an audible
+    # pop/glitch on resume. A previous mock-audio container used the same
+    # while-loop pattern for the same reason; audio-capture keeps it so a
+    # broken pipe just restarts arecord internally instead of the whole
+    # container.
+    command: >
+      sh -c "apk add --no-cache alsa-utils &&
+      while true; do
+      arecord -D plughw:CARD=CODEC,DEV=0 --format=S16_LE --rate=44100 --channels=2 --file-type=raw > /srv/music/behringer.pipe;
+      echo [audio-capture] pipe closed, restarting in 1s;
+      sleep 1;
+      done"
+    devices:
+      - /dev/snd:/dev/snd
+    volumes:
+      - /srv/music:/srv/music
+    group_add:
+      - audio
+    restart: on-failure
+
+  music-frontend:
+    image: music-frontend:${MUSIC_FRONTEND_TAG:?set via --env-file versions.env}
+    container_name: music-frontend
+    depends_on:
+      - owntone
+      - music-backend
+    ports:
+      - "8082:80"
+    restart: unless-stopped
+    networks:
+      - music
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:80"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  music-backend:
+    image: music-backend:${MUSIC_BACKEND_TAG:?set via --env-file versions.env}
+    container_name: music-backend
+    depends_on:
+      - owntone
+    devices:
+      - /dev/ttyUSB0:/dev/ttyUSB0
+    environment:
+      - OWNTONE_URL=http://172.17.0.1:3689
+      - SERIAL_PORT=/dev/ttyUSB0
+    restart: unless-stopped
+    networks:
+      - music
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/api/health')\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
