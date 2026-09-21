@@ -108,9 +108,10 @@ depending on which one:
   `degraded: true`. Check with `docker ps -a` (plain `docker ps` won't show
   it at all); there's no `docker logs` output either. `startup.sh`'s own
   `[!] WARNING` line, visible via `journalctl -u music-system.service`, is
-  the most direct signal. `music-frontend` depends on `music-backend`, so it
-  gets stuck the same way — but this no longer touches anything in
-  `homelab-configs`.
+  the most direct signal. `music-frontend` does **not** depend on
+  `music-backend` (its nginx tolerates a missing backend by design), so the
+  UI stays up and only CD/backend calls fail — and nothing in
+  `homelab-configs` is affected either way.
 - `audio-capture` (`/dev/snd`): lower risk in practice — the server has
   other ALSA sound cards besides the Behringer, so `/dev/snd` as a path
   persists even when the Behringer itself is unplugged. This container is
