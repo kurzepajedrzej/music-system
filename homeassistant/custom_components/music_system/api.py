@@ -60,3 +60,13 @@ class MusicSystemApiClient:
 
     async def async_source_library(self) -> dict[str, Any]:
         return await self._request("POST", "/api/source/library")
+
+    async def async_set_output(
+        self, output_id: str, *, selected: bool | None = None, volume: int | None = None
+    ) -> None:
+        body: dict[str, Any] = {}
+        if selected is not None:
+            body["selected"] = selected
+        if volume is not None:
+            body["volume"] = volume
+        await self._request("PUT", f"/api/outputs/{output_id}", json=body)

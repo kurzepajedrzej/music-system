@@ -116,3 +116,16 @@ async def test_async_get_health_returns_parsed_json(mock_aioresponse):
         )
         result = await client.async_get_health()
         assert result["owntone"] is True
+
+
+async def test_async_set_output_sends_only_the_fields_given(mock_aioresponse):
+    url = "http://192.168.1.199:3000/api/outputs/132116595682064"
+    mock_aioresponse.put(url, payload={"ok": True}, repeat=True)
+    async with aiohttp.ClientSession() as session:
+        client = MusicSystemApiClient(session, "192.168.1.199", 3000)
+        await client.async_set_output("132116595682064", selected=True)
+        await client.async_set_output("132116595682064", selected=False)
+        await client.async_set_output("132116595682064", volume=42)
+        calls = mock_aioresponse.requests[("PUT", yarl.URL(url))]
+        # selected=False must be sent, not dropped as falsy -- it's how a speaker is deselected.
+        assert [c.kwargs["json"] for c in calls] == [{"selected": True}, {"selected": False}, {"volume": 42}]

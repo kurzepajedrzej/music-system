@@ -36,7 +36,7 @@ class MusicSystemHub:
         self._reconnect_delay = reconnect_delay
         self._unavailable_after = unavailable_after
 
-        self.state: dict[str, Any] = {"player": None, "queue": [], "currentTrack": None, "cd": None}
+        self.state: dict[str, Any] = {"player": None, "queue": [], "currentTrack": None, "cd": None, "outputs": []}
 
         self._listeners: list[Callable[[], None]] = []
         self._connected = False
@@ -93,6 +93,7 @@ class MusicSystemHub:
             "queue": snapshot.get("queue", []),
             "currentTrack": snapshot.get("currentTrack"),
             "cd": snapshot.get("cd"),
+            "outputs": snapshot.get("outputs", []),
         }
         self._notify()
 
@@ -153,6 +154,7 @@ class MusicSystemHub:
                 "queue": msg.get("queue", []),
                 "currentTrack": msg.get("currentTrack"),
                 "cd": msg.get("cd"),
+                "outputs": msg.get("outputs", []),
             }
         elif msg_type == "cd":
             incoming = msg.get("cd") or {}

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from unittest.mock import AsyncMock
 
 import pytest
@@ -219,4 +220,55 @@ async def test_becomes_unavailable_after_grace_period_without_reconnect():
 
     await asyncio.sleep(0.15)
     assert hub.available is False
+    await hub.async_stop()
+
+
+_OUTPUTS = [{"id": "44217615186882", "name": "Biuro", "type": "AirPlay 1", "selected": True, "volume": 12}]
+
+
+async def test_outputs_start_empty():
+    hub = MusicSystemHub(asyncio.get_running_loop(), FakeSession([]), make_api())
+    assert hub.state["outputs"] == []
+
+
+async def test_resync_populates_outputs():
+    api = make_api({"player": None, "queue": [], "currentTrack": None, "cd": {"state": "stopped"}, "outputs": _OUTPUTS})
+    session = FakeSession([FakeWs([])])
+    hub = MusicSystemHub(asyncio.get_running_loop(), session, api, reconnect_delay=1000, unavailable_after=1000)
+
+    await hub.async_start()
+
+    assert hub.state["outputs"] == _OUTPUTS
+    await hub.async_stop()
+
+
+async def test_state_message_carries_outputs():
+    api = make_api()
+    msg = FakeMsg("TEXT", data=json.dumps({
+        "type": "state", "player": None, "queue": [], "currentTrack": None,
+        "cd": {"state": "stopped"}, "outputs": _OUTPUTS,
+    }))
+    session = FakeSession([FakeWs([msg])])
+    hub = MusicSystemHub(asyncio.get_running_loop(), session, api, reconnect_delay=1000, unavailable_after=1000)
+
+    await hub.async_start()
+    await asyncio.sleep(0.05)
+
+    assert hub.state["outputs"] == _OUTPUTS
+    await hub.async_stop()
+
+
+async def test_state_message_from_a_backend_without_outputs_degrades_to_empty():
+    # A music-backend older than 1.2.0 (deploy order, or a rollback) sends state without "outputs".
+    api = make_api({"player": None, "queue": [], "currentTrack": None, "cd": {"state": "stopped"}, "outputs": _OUTPUTS})
+    msg = FakeMsg("TEXT", data=json.dumps({
+        "type": "state", "player": None, "queue": [], "currentTrack": None, "cd": {"state": "stopped"},
+    }))
+    session = FakeSession([FakeWs([msg])])
+    hub = MusicSystemHub(asyncio.get_running_loop(), session, api, reconnect_delay=1000, unavailable_after=1000)
+
+    await hub.async_start()
+    await asyncio.sleep(0.05)
+
+    assert hub.state["outputs"] == []
     await hub.async_stop()
