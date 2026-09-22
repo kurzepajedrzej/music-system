@@ -68,6 +68,13 @@ deferred). Fix, mirroring the existing pattern exactly:
   (`app/routers/state.py`): both add an `outputs` field, from the
   already-existing `owntone.get_outputs()` (`app/owntone/client.py:140-141`).
 
+If the outputs fetch itself fails, `outputs` degrades to `[]` and the rest
+of the snapshot is still delivered — an outputs error must never suppress a
+player/queue/CD update that would otherwise have gone out (today
+`broadcast_state()` skips the *entire* broadcast when the player or queue
+fetch fails; outputs is deliberately not folded into that same all-or-
+nothing guard).
+
 This field is the **full, unfiltered** output list — same as `GET
 /api/outputs` today. AirPlay-type filtering and the 3-name allowlist both
 stay client-side (in the HA integration), the same way the frontend's own
@@ -92,8 +99,12 @@ hardware in HA's device-registry sense).
 
 `const.py` gains `AIRPLAY_OUTPUT_ALLOWLIST = ("Biuro", "Salon",
 "Sypialnia")`. A small helper in `media_player.py` filters
-`hub.state["outputs"]` to entries where `type == "AirPlay 1"` and `name in
-AIRPLAY_OUTPUT_ALLOWLIST`, matched fresh from live state every time an
+`hub.state["outputs"]` to entries whose `type` starts with `"AirPlay"` and
+whose `name` is in `AIRPLAY_OUTPUT_ALLOWLIST` — the same type rule the
+frontend's `getOutputs()` already uses, deliberately not an exact match on
+today's observed `"AirPlay 1"`: the Sonos supports AirPlay 2, and an OwnTone
+upgrade reporting it as `"AirPlay 2"` would otherwise make the Salon entity
+silently and permanently unavailable. Matched fresh from live state every time an
 entity needs it (never cached at entity-creation time) — this makes the
 design robust to an output's `id` changing on the OwnTone side (not
 observed, but not guaranteed stable either) without needing entity
@@ -147,6 +158,23 @@ Verified against the installed Home Assistant source
   *full* desired membership, not an incremental add — deselects any
   currently-selected allowlisted output whose entity_id is *not* in the
   incoming list.
+  - **Selects before deselects.** Switching Biuro → Salon must select
+    Salon first, then deselect Biuro — the reverse order leaves OwnTone
+    momentarily with zero selected outputs mid-switch, which can stop
+    playback.
+  - **Rejects entities that aren't this integration's own speakers.** HA's
+    join UI can offer any grouping-capable player — including the Sonos's
+    own native `media_player.salon_salon` (Sonos integration), which also
+    supports `GROUPING`. Joining one of those can't work (it's a
+    different system entirely), so the call raises
+    `ServiceValidationError` naming the unsupported entities and changes
+    nothing, rather than silently applying only part of the request.
+    Likewise, requesting a speaker that's currently missing from the live
+    output list raises instead of partially applying.
+  - **Never touches non-allowlisted outputs.** If a MacBook Air or the
+    Chromecast-typed `Salon` is selected from the frontend, reconciliation
+    leaves it alone and `group_members` doesn't list it — HA only manages
+    its own 3 speakers.
 - `async_unjoin_player()`: on an **output** entity, deselects just that one
   output (`{"selected": false}`), leaving the others alone — matches HA's
   service contract (called on the member being removed, no arguments). On
