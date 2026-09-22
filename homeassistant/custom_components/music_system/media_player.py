@@ -53,6 +53,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     speakers = [
         MusicSystemOutputMediaPlayer(hub, entry.entry_id, name, music_system) for name in AIRPLAY_OUTPUT_ALLOWLIST
     ]
+    music_system.set_speakers(speakers)
     async_add_entities([YamahaCdc600MediaPlayer(hub, entry.entry_id), music_system, *speakers])
 
 
@@ -115,11 +116,13 @@ class MusicSystemMediaPlayer(MusicSystemEntity, MediaPlayerEntity):
         | MediaPlayerEntityFeature.PREVIOUS_TRACK
         | MediaPlayerEntityFeature.VOLUME_SET
         | MediaPlayerEntityFeature.SELECT_SOURCE
+        | MediaPlayerEntityFeature.GROUPING
     )
     _attr_source_list = ["Streaming", *_DISC_SOURCES]
 
     def __init__(self, hub: MusicSystemHub, entry_id: str) -> None:
         super().__init__(hub, device_info_music_system(entry_id), f"{entry_id}_music_system_media_player")
+        self._speakers: list[MusicSystemOutputMediaPlayer] = []
 
     @property
     def available(self) -> bool:
@@ -221,11 +224,42 @@ class MusicSystemMediaPlayer(MusicSystemEntity, MediaPlayerEntity):
             await self._hub.api.async_source_cd()
             await self._hub.api.async_cd_select_disc(disc)
 
+    def set_speakers(self, speakers: list[MusicSystemOutputMediaPlayer]) -> None:
+        self._speakers = list(speakers)
+
+    @property
+    def group_members(self) -> list[str]:
+        selected = [s.entity_id for s in self._speakers if s.is_selected]
+        return [self.entity_id, *selected] if selected else []
+
+    async def async_join_players(self, group_members: list[str]) -> None:
+        await self.async_set_group(set(group_members) - {self.entity_id})
+
+    async def async_unjoin_player(self) -> None:
+        await self.async_set_group(set())
+
+    async def async_set_group(self, wanted: set[str]) -> None:
+        """Make exactly `wanted` (speaker entity_ids) the selected speakers."""
+        by_entity_id = {s.entity_id: s for s in self._speakers}
+        unknown = sorted(wanted - by_entity_id.keys())
+        if unknown:
+            raise ServiceValidationError(
+                f"Can't group {', '.join(unknown)} with Music System -- only its own speakers "
+                f"({', '.join(sorted(by_entity_id))}) can join"
+            )
+        changes = [(s, s.entity_id in wanted) for s in self._speakers if (s.entity_id in wanted) != s.is_selected]
+        missing = [s.output_name for s, select in changes if select and s.output is None]
+        if missing:
+            raise ServiceValidationError(f"{', '.join(missing)} isn't in OwnTone's current output list")
+        # Selects before deselects: the reverse leaves OwnTone with zero outputs mid-switch.
+        for speaker, select in sorted(changes, key=lambda change: not change[1]):
+            await self._hub.api.async_set_output(speaker.output["id"], selected=select)
+
 
 class MusicSystemOutputMediaPlayer(MusicSystemEntity, MediaPlayerEntity):
     """One of the user's AirPlay speakers, as an OwnTone output of the Music System stream."""
 
-    _attr_supported_features = MediaPlayerEntityFeature.VOLUME_SET
+    _attr_supported_features = MediaPlayerEntityFeature.VOLUME_SET | MediaPlayerEntityFeature.GROUPING
 
     def __init__(
         self, hub: MusicSystemHub, entry_id: str, output_name: str, music_system: MusicSystemMediaPlayer
@@ -265,6 +299,18 @@ class MusicSystemOutputMediaPlayer(MusicSystemEntity, MediaPlayerEntity):
     async def async_set_volume_level(self, volume: float) -> None:
         output = self._require_output()
         await self._hub.api.async_set_output(output["id"], volume=round(volume * 100))
+
+    @property
+    def group_members(self) -> list[str]:
+        return self._music_system.group_members if self.is_selected else []
+
+    async def async_join_players(self, group_members: list[str]) -> None:
+        # Joining from a speaker's card: the desired group is that speaker plus the ones named.
+        await self._music_system.async_set_group({self.entity_id, *group_members} - {self._music_system.entity_id})
+
+    async def async_unjoin_player(self) -> None:
+        if self.is_selected:
+            await self._hub.api.async_set_output(self.output["id"], selected=False)
 
     def _require_output(self) -> dict:
         output = self.output

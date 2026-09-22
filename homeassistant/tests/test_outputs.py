@@ -3,9 +3,10 @@ from __future__ import annotations
 
 import copy
 from types import SimpleNamespace
+from unittest.mock import call
 
 import pytest
-from homeassistant.components.media_player import MediaPlayerState
+from homeassistant.components.media_player import MediaPlayerEntityFeature, MediaPlayerState
 from homeassistant.exceptions import ServiceValidationError
 
 from custom_components.music_system.const import AIRPLAY_OUTPUT_ALLOWLIST, DOMAIN
@@ -144,3 +145,143 @@ async def test_set_volume_on_a_missing_speaker_raises_instead_of_doing_nothing(f
     with pytest.raises(ServiceValidationError, match="Biuro"):
         await speakers["Biuro"].async_set_volume_level(0.5)
     fake_hub.api.async_set_output.assert_not_awaited()
+
+
+def _make_group(fake_hub):
+    music_system, speakers = _make_speakers(fake_hub)
+    music_system.set_speakers(list(speakers.values()))
+    return music_system, speakers
+
+
+def test_music_system_and_speakers_support_grouping(fake_hub):
+    music_system, speakers = _make_group(fake_hub)
+    assert music_system.supported_features & MediaPlayerEntityFeature.GROUPING
+    assert all(s.supported_features & MediaPlayerEntityFeature.GROUPING for s in speakers.values())
+
+
+def test_group_members_reported_identically_by_every_grouped_entity(fake_hub):
+    outputs = _live_outputs()
+    next(o for o in outputs if o["id"] == "132116595682064")["selected"] = True  # Salon too
+    fake_hub.state["outputs"] = outputs
+    music_system, speakers = _make_group(fake_hub)
+
+    expected = ["media_player.music_system", "media_player.music_system_biuro", "media_player.music_system_salon"]
+    assert music_system.group_members == expected
+    assert speakers["Biuro"].group_members == expected
+    assert speakers["Salon"].group_members == expected
+    assert speakers["Sypialnia"].group_members == []
+
+
+def test_nothing_selected_means_no_group(fake_hub):
+    outputs = _live_outputs()
+    next(o for o in outputs if o["id"] == "44217615186882")["selected"] = False
+    fake_hub.state["outputs"] = outputs
+    music_system, _ = _make_group(fake_hub)
+
+    assert music_system.group_members == []
+
+
+async def test_switching_speakers_selects_new_before_deselecting_old(fake_hub):
+    fake_hub.state["outputs"] = _live_outputs()  # Biuro selected
+    music_system, _ = _make_group(fake_hub)
+
+    await music_system.async_join_players(["media_player.music_system_salon"])
+
+    assert fake_hub.api.async_set_output.await_args_list == [
+        call("132116595682064", selected=True),
+        call("44217615186882", selected=False),
+    ]
+
+
+async def test_join_from_a_speakers_card_includes_that_speaker(fake_hub):
+    fake_hub.state["outputs"] = _live_outputs()  # Biuro selected
+    _, speakers = _make_group(fake_hub)
+
+    await speakers["Salon"].async_join_players(["media_player.music_system_sypialnia"])
+
+    assert fake_hub.api.async_set_output.await_args_list == [
+        call("132116595682064", selected=True),
+        call("194432309644673", selected=True),
+        call("44217615186882", selected=False),
+    ]
+
+
+async def test_join_rejects_players_from_other_integrations_and_changes_nothing(fake_hub):
+    fake_hub.state["outputs"] = _live_outputs()
+    music_system, _ = _make_group(fake_hub)
+
+    with pytest.raises(ServiceValidationError, match="media_player.salon_salon"):
+        await music_system.async_join_players(["media_player.music_system_salon", "media_player.salon_salon"])
+    fake_hub.api.async_set_output.assert_not_awaited()
+
+
+async def test_join_with_a_speaker_missing_from_owntone_raises_and_changes_nothing(fake_hub):
+    fake_hub.state["outputs"] = [o for o in _live_outputs() if o["name"] != "Sypialnia"]
+    music_system, _ = _make_group(fake_hub)
+
+    with pytest.raises(ServiceValidationError, match="Sypialnia"):
+        await music_system.async_join_players(
+            ["media_player.music_system_salon", "media_player.music_system_sypialnia"]
+        )
+    fake_hub.api.async_set_output.assert_not_awaited()
+
+
+async def test_join_never_touches_non_allowlisted_outputs(fake_hub):
+    outputs = _live_outputs()
+    next(o for o in outputs if o["id"] == "46618402699677")["selected"] = True  # MacBook Air, from the frontend
+    fake_hub.state["outputs"] = outputs
+    music_system, _ = _make_group(fake_hub)
+
+    assert music_system.group_members == ["media_player.music_system", "media_player.music_system_biuro"]
+    await music_system.async_join_players(["media_player.music_system_salon"])
+
+    touched = [c.args[0] for c in fake_hub.api.async_set_output.await_args_list]
+    assert "46618402699677" not in touched
+
+
+async def test_unjoin_speaker_deselects_only_that_speaker(fake_hub):
+    outputs = _live_outputs()
+    next(o for o in outputs if o["id"] == "132116595682064")["selected"] = True
+    fake_hub.state["outputs"] = outputs
+    _, speakers = _make_group(fake_hub)
+
+    await speakers["Salon"].async_unjoin_player()
+
+    fake_hub.api.async_set_output.assert_awaited_once_with("132116595682064", selected=False)
+
+
+async def test_unjoin_unselected_speaker_is_a_no_op(fake_hub):
+    fake_hub.state["outputs"] = _live_outputs()
+    _, speakers = _make_group(fake_hub)
+
+    await speakers["Sypialnia"].async_unjoin_player()
+
+    fake_hub.api.async_set_output.assert_not_awaited()
+
+
+async def test_unjoin_music_system_deselects_every_selected_speaker(fake_hub):
+    outputs = _live_outputs()
+    next(o for o in outputs if o["id"] == "132116595682064")["selected"] = True
+    fake_hub.state["outputs"] = outputs
+    music_system, _ = _make_group(fake_hub)
+
+    await music_system.async_unjoin_player()
+
+    assert fake_hub.api.async_set_output.await_args_list == [
+        call("44217615186882", selected=False),
+        call("132116595682064", selected=False),
+    ]
+
+
+async def test_setup_entry_wires_speakers_into_music_systems_group(fake_hub):
+    fake_hub.state["outputs"] = _live_outputs()
+    hass = SimpleNamespace(data={DOMAIN: {"entry123": fake_hub}})
+    added = []
+
+    await async_setup_entry(hass, SimpleNamespace(entry_id="entry123"), added.extend)
+
+    music_system = next(e for e in added if isinstance(e, MusicSystemMediaPlayer))
+    biuro = next(e for e in added if isinstance(e, MusicSystemOutputMediaPlayer) and e.output_name == "Biuro")
+    music_system.entity_id = "media_player.music_system"
+    biuro.entity_id = "media_player.music_system_biuro"
+    assert music_system.group_members == ["media_player.music_system", "media_player.music_system_biuro"]

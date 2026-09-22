@@ -89,7 +89,9 @@ actions:
 `homeassistant/` is a Home Assistant custom integration. It isn't a container.
 It exposes the CD deck and the unified player as entities: two media players,
 a power switch, buttons for tray, disc, search, repeat, and random, and a
-track-select number.
+track-select number. It also exposes one media player per AirPlay speaker
+(Salon, Sypialnia, Biuro) -- group them with Music System from its more-info
+dialog to choose where audio plays.
 
 It's deployed by bind mount. The main stack's `homeassistant` container mounts
 `homeassistant/custom_components/music_system` from this checkout, read-only.
