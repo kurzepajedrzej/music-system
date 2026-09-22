@@ -145,6 +145,15 @@ async def set_output(output_id: str, body: dict) -> None:
     await put(f"/api/outputs/{output_id}", body)
 
 
+async def get_output_list() -> list[dict]:
+    # For combined state snapshots: an outputs error means "no outputs",
+    # never a failed snapshot -- player/queue/CD are still worth delivering.
+    try:
+        return (await get_outputs()).get("outputs", [])
+    except Exception:
+        return []
+
+
 # ── Artwork ─────────────────────────────────────────────────────────────────
 # OwnTone serves artwork from /artwork/..., not /api/artwork/..., and keys it
 # by small internal ids (group/3, item/2) rather than the persistent album id

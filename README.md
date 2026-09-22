@@ -65,7 +65,7 @@ API surface (all under `/api`):
 | Route | Purpose |
 |---|---|
 | `GET /health`, `GET /health/pipe` | Health of OwnTone, the CD deck, and the audio pipe |
-| `GET /state` | Combined player and CD snapshot |
+| `GET /state` | Combined player, CD, and output snapshot |
 | `/player` | Play, pause, next, seek, volume |
 | `/queue`, `/library`, `/search` | Browse the library and queue tracks |
 | `/outputs` | List and enable AirPlay speakers |

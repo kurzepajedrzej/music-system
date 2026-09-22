@@ -43,6 +43,7 @@ async def broadcast_state() -> None:
     current_track = None
     if player and player.get("item_id") is not None:
         current_track = next((i for i in items if i["id"] == player["item_id"]), items[0] if items else None)
+    outputs = await owntone.get_output_list()
 
     await _broadcast({
         "type": "state",
@@ -50,6 +51,7 @@ async def broadcast_state() -> None:
         "queue": items,
         "currentTrack": current_track,
         "cd": manager.status(),
+        "outputs": outputs,
         "timestamp": int(time.time() * 1000),
     })
 
@@ -88,7 +90,7 @@ async def _tick_loop() -> None:
 
 
 async def _on_owntone_notify(notifications: list[str]) -> None:
-    if "player" in notifications or "queue" in notifications:
+    if {"player", "queue", "outputs"} & set(notifications):
         await broadcast_state()
 
 

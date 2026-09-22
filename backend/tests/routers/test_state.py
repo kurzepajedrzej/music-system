@@ -42,3 +42,38 @@ def test_bare_prefix_answers_directly_without_redirect():
     respx.get(f"{config.OWNTONE_URL}/api/queue").mock(return_value=httpx.Response(500))
     r = client.get("/api/state", follow_redirects=False)
     assert r.status_code == 200
+
+
+_OUTPUTS = [
+    {"id": "44217615186882", "name": "Biuro", "type": "AirPlay 1", "selected": True, "volume": 12},
+    {"id": "0", "name": "Computer", "type": "ALSA", "selected": False, "volume": 50},
+]
+
+
+@respx.mock
+def test_state_includes_full_unfiltered_outputs():
+    respx.get(f"{config.OWNTONE_URL}/api/player").mock(return_value=httpx.Response(200, json={"state": "stop"}))
+    respx.get(f"{config.OWNTONE_URL}/api/queue").mock(return_value=httpx.Response(200, json={"items": []}))
+    respx.get(f"{config.OWNTONE_URL}/api/outputs").mock(
+        return_value=httpx.Response(200, json={"outputs": _OUTPUTS})
+    )
+    r = client.get("/api/state")
+    assert r.status_code == 200
+    # Unfiltered on purpose: the ALSA output stays in. AirPlay filtering is each consumer's job.
+    assert r.json()["outputs"] == _OUTPUTS
+
+
+@respx.mock
+def test_state_outputs_degrade_to_empty_without_losing_the_rest():
+    respx.get(f"{config.OWNTONE_URL}/api/player").mock(
+        return_value=httpx.Response(200, json={"item_id": 5, "state": "play"})
+    )
+    respx.get(f"{config.OWNTONE_URL}/api/queue").mock(
+        return_value=httpx.Response(200, json={"items": [{"id": 5, "title": "Song"}]})
+    )
+    respx.get(f"{config.OWNTONE_URL}/api/outputs").mock(return_value=httpx.Response(500))
+    r = client.get("/api/state")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["outputs"] == []
+    assert body["currentTrack"]["title"] == "Song"

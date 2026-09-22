@@ -159,3 +159,64 @@ def test_broadcast_survives_client_set_mutated_mid_iteration():
         assert ws_b.received == [{"type": "state"}]
     finally:
         unified._clients.clear()
+
+
+_OUTPUTS = [
+    {"id": "44217615186882", "name": "Biuro", "type": "AirPlay 1", "selected": True, "volume": 12},
+    {"id": "0", "name": "Computer", "type": "ALSA", "selected": False, "volume": 50},
+]
+
+
+def test_outputs_notification_triggers_state_broadcast(monkeypatch):
+    calls = []
+
+    async def fake_broadcast_state():
+        calls.append("broadcast")
+
+    monkeypatch.setattr(unified, "broadcast_state", fake_broadcast_state)
+    asyncio.run(unified._on_owntone_notify(["outputs"]))
+    assert calls == ["broadcast"]
+
+
+def test_unrelated_notification_does_not_broadcast(monkeypatch):
+    calls = []
+
+    async def fake_broadcast_state():
+        calls.append("broadcast")
+
+    monkeypatch.setattr(unified, "broadcast_state", fake_broadcast_state)
+    asyncio.run(unified._on_owntone_notify(["options"]))
+    assert calls == []
+
+
+@respx.mock
+def test_state_broadcast_carries_full_unfiltered_outputs():
+    respx.get(f"{config.OWNTONE_URL}/api/player").mock(return_value=httpx.Response(200, json={"state": "stop"}))
+    respx.get(f"{config.OWNTONE_URL}/api/queue").mock(return_value=httpx.Response(200, json={"items": []}))
+    respx.get(f"{config.OWNTONE_URL}/api/outputs").mock(
+        return_value=httpx.Response(200, json={"outputs": _OUTPUTS})
+    )
+    try:
+        client = TestClient(app)
+        with client.websocket_connect("/api/ws") as ws:
+            frame = ws.receive_json()
+            assert frame["type"] == "state"
+            assert frame["outputs"] == _OUTPUTS
+    finally:
+        unified._clients.clear()
+
+
+@respx.mock
+def test_state_broadcast_still_goes_out_when_outputs_fetch_fails():
+    respx.get(f"{config.OWNTONE_URL}/api/player").mock(return_value=httpx.Response(200, json={"state": "stop"}))
+    respx.get(f"{config.OWNTONE_URL}/api/queue").mock(return_value=httpx.Response(200, json={"items": []}))
+    respx.get(f"{config.OWNTONE_URL}/api/outputs").mock(return_value=httpx.Response(500))
+    try:
+        client = TestClient(app)
+        with client.websocket_connect("/api/ws") as ws:
+            frame = ws.receive_json()
+            assert frame["type"] == "state"
+            assert frame["player"] == {"state": "stop"}
+            assert frame["outputs"] == []
+    finally:
+        unified._clients.clear()

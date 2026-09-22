@@ -30,5 +30,6 @@ async def get_state():
         "queue": items,
         "currentTrack": current_track,
         "cd": manager.status(),
+        "outputs": await owntone.get_output_list(),
         "timestamp": int(time.time() * 1000),
     }
