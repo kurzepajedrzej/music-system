@@ -8,9 +8,10 @@ from homeassistant.components.media_player import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from .const import AIRPLAY_OUTPUT_ALLOWLIST, DOMAIN
 from .entity import MusicSystemEntity, YamahaCdc600Entity, device_info_cdc600, device_info_music_system
 from .hub import MusicSystemHub
 
@@ -38,14 +39,21 @@ def _is_cd_source(current_track: dict | None) -> bool:
     return bool(current_track) and current_track.get("data_kind") == "pipe"
 
 
+def _find_allowlisted_output(outputs: list[dict], name: str) -> dict | None:
+    # Name plus AirPlay type, never name alone: OwnTone also has a Chromecast-typed "Salon".
+    return next(
+        (o for o in outputs if o.get("name") == name and str(o.get("type", "")).startswith("AirPlay")),
+        None,
+    )
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     hub: MusicSystemHub = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities(
-        [
-            YamahaCdc600MediaPlayer(hub, entry.entry_id),
-            MusicSystemMediaPlayer(hub, entry.entry_id),
-        ]
-    )
+    music_system = MusicSystemMediaPlayer(hub, entry.entry_id)
+    speakers = [
+        MusicSystemOutputMediaPlayer(hub, entry.entry_id, name, music_system) for name in AIRPLAY_OUTPUT_ALLOWLIST
+    ]
+    async_add_entities([YamahaCdc600MediaPlayer(hub, entry.entry_id), music_system, *speakers])
 
 
 class YamahaCdc600MediaPlayer(YamahaCdc600Entity, MediaPlayerEntity):
@@ -212,3 +220,54 @@ class MusicSystemMediaPlayer(MusicSystemEntity, MediaPlayerEntity):
             disc = _DISC_SOURCES.index(source) + 1
             await self._hub.api.async_source_cd()
             await self._hub.api.async_cd_select_disc(disc)
+
+
+class MusicSystemOutputMediaPlayer(MusicSystemEntity, MediaPlayerEntity):
+    """One of the user's AirPlay speakers, as an OwnTone output of the Music System stream."""
+
+    _attr_supported_features = MediaPlayerEntityFeature.VOLUME_SET
+
+    def __init__(
+        self, hub: MusicSystemHub, entry_id: str, output_name: str, music_system: MusicSystemMediaPlayer
+    ) -> None:
+        super().__init__(
+            hub, device_info_music_system(entry_id), f"{entry_id}_music_system_output_{output_name.lower()}"
+        )
+        self._attr_name = output_name
+        self.output_name = output_name
+        self._music_system = music_system
+
+    @property
+    def output(self) -> dict | None:
+        return _find_allowlisted_output(self._hub.state.get("outputs") or [], self.output_name)
+
+    @property
+    def is_selected(self) -> bool:
+        output = self.output
+        return bool(output and output.get("selected"))
+
+    @property
+    def available(self) -> bool:
+        return super().available and self.output is not None
+
+    @property
+    def state(self) -> MediaPlayerState:
+        # IDLE, not OFF, when unselected: the speaker is reachable, just not part of the stream.
+        return self._music_system.state if self.is_selected else MediaPlayerState.IDLE
+
+    @property
+    def volume_level(self) -> float | None:
+        output = self.output
+        if output is None or output.get("volume") is None:
+            return None
+        return output["volume"] / 100
+
+    async def async_set_volume_level(self, volume: float) -> None:
+        output = self._require_output()
+        await self._hub.api.async_set_output(output["id"], volume=round(volume * 100))
+
+    def _require_output(self) -> dict:
+        output = self.output
+        if output is None:
+            raise ServiceValidationError(f"{self.output_name} isn't in OwnTone's current output list")
+        return output

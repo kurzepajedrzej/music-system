@@ -13,3 +13,7 @@ RECONNECT_DELAY = 3.0
 
 # Seconds without a live WebSocket connection before entities go unavailable.
 UNAVAILABLE_AFTER = 15.0
+
+# The user's permanent AirPlay speakers (Sonos, AirPort Express, Bose), by
+# OwnTone output name -- the only outputs exposed as HA entities.
+AIRPLAY_OUTPUT_ALLOWLIST: tuple[str, ...] = ("Biuro", "Salon", "Sypialnia")
