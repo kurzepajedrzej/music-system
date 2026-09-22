@@ -11,10 +11,27 @@ STX = b"\x02"
 ETX = b"\x03"
 DC1 = b"\x11"
 DC2 = 0x12
+DC4 = b"\x14"
 
 
 def _rc(code: str) -> bytes:
     return STX + b"0" + code.encode("ascii") + ETX
+
+
+def _get_status_and_disc_info_command() -> bytes:
+    # Extended command, DC4-headed, per CD-C600_RS232C_ver1.1.pdf section
+    # 6.1 (table 6.1): SW='4' (extended command) + Length="10" (hex 0x10 =
+    # byte size of command-code + reserved data area that follows) +
+    # CommandCode="10" ("Get status and disc information") + 14 reserved
+    # zero bytes, then a checksum (lower 8 bits of the sum of SW through
+    # the data area, as 2 uppercase hex ASCII chars) and ETX. Every prior
+    # attempt at this command that omitted the Length field and/or the
+    # checksum got silently ignored by the real hardware — confirmed by
+    # direct probing (see docs/superpowers/specs/... for the session that
+    # decoded this).
+    body = b"4" + b"10" + b"10" + b"0" * 14
+    checksum = f"{sum(body) & 0xFF:02X}".encode("ascii")
+    return DC4 + body + checksum + ETX
 
 
 class CDC600Commands:
@@ -36,6 +53,7 @@ class CDC600Commands:
     POWER_ON = _rc("797E")
     POWER_OFF = _rc("797F")
     STATUS = STX + b"41000" + ETX
+    GET_STATUS_AND_DISC_INFO = _get_status_and_disc_info_command()
 
 
 _STATUS_CODES = {
@@ -75,6 +93,39 @@ def _parse_state(raw: bytes) -> str | None:
     return _STATUS_CODES.get(status_code)
 
 
+def _parse_disc_and_track_info(raw: bytes) -> dict | None:
+    # Reply to "Get status and disc information" (DC4-headed extended
+    # command), per CD-C600_RS232C_ver1.1.pdf section 6.2 (table 6.2), CD
+    # mode: byte6=return code, byte7=USB/CD mode, byte13=current disc
+    # number ('1'-'5', or '0'/'F' for home/unknown), bytes[25:27]=current
+    # track number, bytes[29:31]/[31:33]/[33:35]=elapsed hour/min/sec.
+    # Field positions and encoding confirmed against real hardware: track
+    # number tracked skip+/skip- in lockstep, and track 10 read back as
+    # ASCII "10" (decimal), not "0A" (hex) - unlike the plain status code,
+    # which the spec documents as hex.
+    if len(raw) < 38 or raw[:1] != DC4 or raw[-1:] != ETX:
+        return None
+    if raw[6:7] != b"0":  # Return code: 0 = command accept
+        return None
+    if raw[7:8] != b"0":  # Current USB/CD mode: 0 = CD (the only mode this system uses)
+        return None
+    disc_char = chr(raw[13])
+    if disc_char not in "12345":
+        return None  # '0' = home position, 'F' = unknown - nothing usable yet
+    try:
+        track = int(raw[25:27].decode("ascii"))
+        hour = int(raw[29:31].decode("ascii"))
+        minute = int(raw[31:33].decode("ascii"))
+        second = int(raw[33:35].decode("ascii"))
+    except ValueError:
+        return None
+    return {
+        "disc": int(disc_char),
+        "track": track,
+        "elapsed_seconds": hour * 3600 + minute * 60 + second,
+    }
+
+
 class SerialController:
     """Async-compatible RS-232C controller for the Yamaha CDC-600.
 
@@ -88,19 +139,27 @@ class SerialController:
     poller is already running, this invariant would need revisiting.
     """
 
-    def __init__(self, port: str = "/dev/ttyUSB0", baud: int = 9600) -> None:
+    def __init__(
+        self,
+        port: str = "/dev/ttyUSB0",
+        baud: int = 9600,
+        disc_info_interval: float = 4.0,
+    ) -> None:
         self._port = port
         self._baud = baud
         self._conn: serial.Serial | None = None
         self._port_lock = asyncio.Lock()
+        self._disc_info_interval = disc_info_interval
 
         self._state: str = "stopped"
         self._disc_present: bool = True
         self._track: int = 1
         self._disc: int = 1
+        self._elapsed_seconds: int = 0
 
         self._listeners: list[Callable] = []
         self._poll_task: asyncio.Task | None = None
+        self._disc_info_poll_task: asyncio.Task | None = None
 
     async def connect(self) -> None:
         # _connect_blocking does real blocking I/O (port open, a settle
@@ -112,6 +171,7 @@ class SerialController:
         # thread, so it stays out here rather than inside the threaded call.
         await asyncio.to_thread(self._connect_blocking)
         self._poll_task = asyncio.create_task(self._poll_loop())
+        self._disc_info_poll_task = asyncio.create_task(self._disc_info_poll_loop())
 
     def _connect_blocking(self) -> None:
         self._conn = serial.Serial(
@@ -136,6 +196,8 @@ class SerialController:
     def disconnect(self) -> None:
         if self._poll_task and not self._poll_task.done():
             self._poll_task.cancel()
+        if self._disc_info_poll_task and not self._disc_info_poll_task.done():
+            self._disc_info_poll_task.cancel()
         if self._conn and self._conn.is_open:
             self._conn.close()
 
@@ -177,6 +239,16 @@ class SerialController:
             log.debug("Status query error: %s", e)
             return None
 
+    def _query_disc_info_sync(self) -> dict | None:
+        try:
+            self._conn.reset_input_buffer()
+            self._send(CDC600Commands.GET_STATUS_AND_DISC_INFO)
+            raw = self._read_until_etx()
+            return _parse_disc_and_track_info(raw)
+        except Exception as e:
+            log.debug("Disc info query error: %s", e)
+            return None
+
     def subscribe(self, cb: Callable) -> None:
         self._listeners.append(cb)
 
@@ -207,6 +279,39 @@ class SerialController:
             except Exception as e:
                 log.debug("Poll loop error: %s", e)
 
+    async def _disc_info_poll_loop(self) -> None:
+        while True:
+            await asyncio.sleep(self._disc_info_interval)
+            try:
+                await self._disc_info_poll_once()
+            except asyncio.CancelledError:
+                return
+            except Exception as e:
+                log.debug("Disc info poll loop error: %s", e)
+
+    async def _disc_info_poll_once(self) -> None:
+        # Gated on power state, not play state: the user wants this to
+        # reflect the real disc/track whenever the deck is reachable, not
+        # only while actively playing (e.g. so pausing mid-track doesn't
+        # freeze the displayed track at a stale value). "Powered off" is
+        # the one state where the query would be pointless.
+        if self._state == "powered_off":
+            return
+        async with self._port_lock:
+            info = await asyncio.to_thread(self._query_disc_info_sync)
+        if info is None:
+            return
+        changed = (
+            info["disc"] != self._disc
+            or info["track"] != self._track
+            or info["elapsed_seconds"] != self._elapsed_seconds
+        )
+        if changed:
+            self._disc = info["disc"]
+            self._track = info["track"]
+            self._elapsed_seconds = info["elapsed_seconds"]
+            await self._notify()
+
     def status(self) -> dict:
         return {
             "state": self._state,
@@ -214,7 +319,7 @@ class SerialController:
             "track": self._track,
             "disc": self._disc,
             "total_tracks": 0,
-            "elapsed_seconds": 0,
+            "elapsed_seconds": self._elapsed_seconds,
             "track_duration_seconds": 0,
         }
 

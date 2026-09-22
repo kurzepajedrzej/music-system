@@ -66,8 +66,21 @@ Port settings: 9600 baud, 8N1, no flow control. Protocol is Yamaha's
 "CD-C600 RS-232C Interface Specifications" (text-frame commands, `STX`/`ETX`
 framing, remote-control hex codes for transport, a `Get player status`
 poll for state) — see `serial_controller.py` for the parts this service
-actually uses; disc/track-position detail (spec's extended `DC4` commands)
-isn't implemented yet.
+actually uses.
+
+**Real disc/track position** comes from the extended `DC4`-headed "Get
+status and disc information" command, polled every 4s (only while the deck
+isn't powered off) alongside the 2s state poll — this is what keeps `track`/
+`disc`/`elapsed_seconds` in sync with the physical remote or a track ending
+on its own, rather than only updating on commands this service itself
+issued. The request needs a `Length` field and a checksum that aren't
+obvious from a byte-shape guess alone (every attempt omitting either was
+silently ignored by real hardware) — the full official spec (Yamaha
+`CD-C600_RS232C_ver1.1.pdf`, section 6) has the exact frame layout;
+`_get_status_and_disc_info_command()`/`_parse_disc_and_track_info()` in
+`serial_controller.py` implement it. `total_tracks`/`track_duration_seconds`
+are still hardcoded to `0` — that needs the separate "Get 1 Disc
+Information" burst command, not implemented.
 
 ## Testing
 

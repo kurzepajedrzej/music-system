@@ -4,7 +4,7 @@ import time
 import pytest
 
 from app.cdplayer import serial_controller as sc_module
-from app.cdplayer.serial_controller import SerialController, _parse_state
+from app.cdplayer.serial_controller import CDC600Commands, SerialController, _parse_disc_and_track_info, _parse_state
 
 
 class FakeSerial:
@@ -585,3 +585,160 @@ def test_query_status_flushes_input_buffer_before_querying():
     kinds = [kind for kind, _ in controller._conn.event_log]
     assert "reset" in kinds
     assert kinds.index("reset") < kinds.index("write")
+
+
+# ── "Get status and disc information" (DC4 extended command) ────────────────
+# Request/response shapes are from CD-C600_RS232C_ver1.1.pdf section 6
+# (tables 6.1/6.2) - the official Yamaha spec, found and decoded after
+# every earlier guess at the DC4 frame shape (no Length field, no
+# checksum) got silently ignored by the real hardware. Confirmed against
+# a real CDC-600: skip+/skip- move the parsed track number in lockstep,
+# and track 10 reads back as ASCII "10" (decimal), not "0A" (hex).
+
+
+def test_get_status_and_disc_info_command_matches_spec_bytes():
+    # SW='4', Length="10" (hex 0x10 = size of CommandCode + 14-byte data
+    # area), CommandCode="10", 14 reserved zero bytes, checksum = lower
+    # 8 bits of the sum of all of the above as 2 uppercase hex chars.
+    body = b"4" + b"10" + b"10" + b"0" * 14
+    expected_checksum = f"{sum(body) & 0xFF:02X}".encode("ascii")
+    expected = bytes([0x14]) + body + expected_checksum + bytes([0x03])
+    assert CDC600Commands.GET_STATUS_AND_DISC_INFO == expected
+    # Confirmed working against real hardware with exactly this checksum.
+    assert expected_checksum == b"96"
+
+
+# Real capture from a live CDC-600: disc 3, track 7, position 00:01:55,
+# status "10" (playing). Captured while decoding this command against
+# actual hardware.
+_REAL_DISC_INFO_RESPONSE = bytes.fromhex(
+    "14 34 31 46 31 30 30 30 31 30 30 30 30 33 31 30 31 30 31 30 46 46 46 46 30 30 37 30 30 30 30 30 31 35 35 45 44 03"
+)
+
+
+def test_parse_disc_and_track_info_reads_the_real_captured_example():
+    result = _parse_disc_and_track_info(_REAL_DISC_INFO_RESPONSE)
+    assert result == {"disc": 3, "track": 7, "elapsed_seconds": 115}
+
+
+def test_parse_disc_and_track_info_track_ten_is_decimal_not_hex():
+    # Confirmed empirically by walking a real disc forward past track 9:
+    # the field reads back ASCII "10", never hex "0A" - unlike the plain
+    # status code field, which the spec documents as hex.
+    raw = bytearray(_REAL_DISC_INFO_RESPONSE)
+    raw[25:27] = b"10"
+    assert _parse_disc_and_track_info(bytes(raw))["track"] == 10
+
+
+def test_parse_disc_and_track_info_returns_none_for_malformed_frame():
+    assert _parse_disc_and_track_info(b"") is None
+    assert _parse_disc_and_track_info(b"not a frame") is None
+    assert _parse_disc_and_track_info(_REAL_DISC_INFO_RESPONSE[:-1]) is None  # missing ETX
+
+
+def test_parse_disc_and_track_info_returns_none_for_rejected_command():
+    raw = bytearray(_REAL_DISC_INFO_RESPONSE)
+    raw[6] = ord("4")  # Return code 4 = command parameter error
+    assert _parse_disc_and_track_info(bytes(raw)) is None
+
+
+def test_parse_disc_and_track_info_returns_none_for_non_cd_mode():
+    raw = bytearray(_REAL_DISC_INFO_RESPONSE)
+    raw[7] = ord("1")  # Current USB/CD mode: 1 = USB, not CD
+    assert _parse_disc_and_track_info(bytes(raw)) is None
+
+
+def test_parse_disc_and_track_info_returns_none_for_unknown_disc_position():
+    raw = bytearray(_REAL_DISC_INFO_RESPONSE)
+    raw[13] = ord("F")  # 'F' = disc position unknown
+    assert _parse_disc_and_track_info(bytes(raw)) is None
+
+
+def test_query_disc_info_flushes_input_buffer_before_querying():
+    controller = SerialController()
+    controller._conn = FakeSerial()
+    controller._conn._to_read = [_REAL_DISC_INFO_RESPONSE]
+
+    result = controller._query_disc_info_sync()
+
+    assert result == {"disc": 3, "track": 7, "elapsed_seconds": 115}
+    kinds = [kind for kind, _ in controller._conn.event_log]
+    assert "reset" in kinds
+    assert kinds.index("reset") < kinds.index("write")
+
+
+# ── _disc_info_poll_once(): gating and change detection ─────────────────────
+# Deliberately not testing this through the real _disc_info_poll_loop's
+# asyncio.sleep timing - _disc_info_poll_once is the whole loop body,
+# directly callable, so these tests are exact and instant instead of
+# racing wall-clock sleeps.
+
+
+async def test_disc_info_poll_once_updates_disc_track_and_elapsed_on_change():
+    controller = SerialController()
+    controller._conn = FakeSerial()
+    controller._conn._to_read = [_REAL_DISC_INFO_RESPONSE]
+    controller._state = "playing"
+    notified = []
+
+    async def on_update(status):
+        notified.append(status)
+
+    controller.subscribe(on_update)
+
+    await controller._disc_info_poll_once()
+
+    assert controller._disc == 3
+    assert controller._track == 7
+    assert controller._elapsed_seconds == 115
+    assert len(notified) == 1
+
+
+async def test_disc_info_poll_once_does_not_query_when_powered_off():
+    controller = SerialController()
+    controller._conn = FakeSerial()
+    controller._conn._to_read = [_REAL_DISC_INFO_RESPONSE]
+    controller._state = "powered_off"
+
+    await controller._disc_info_poll_once()
+
+    assert controller._conn.writes == []
+    assert controller._track == 1  # untouched default, nothing was queried
+
+
+async def test_disc_info_poll_once_does_not_notify_when_nothing_changed():
+    controller = SerialController()
+    controller._conn = FakeSerial()
+    controller._conn._to_read = [_REAL_DISC_INFO_RESPONSE]
+    controller._state = "playing"
+    controller._disc = 3
+    controller._track = 7
+    controller._elapsed_seconds = 115
+    notified = []
+
+    async def on_update(status):
+        notified.append(status)
+
+    controller.subscribe(on_update)
+
+    await controller._disc_info_poll_once()
+
+    assert notified == []
+
+
+async def test_disc_info_poll_once_ignores_unparseable_reply():
+    controller = SerialController()
+    controller._conn = FakeSerial()
+    controller._conn._to_read = [b"garbage"]
+    controller._state = "playing"
+    controller._track = 5
+
+    await controller._disc_info_poll_once()
+
+    assert controller._track == 5  # unchanged - nothing usable came back
+
+
+def test_status_reports_real_elapsed_seconds_once_known():
+    controller = SerialController()
+    controller._elapsed_seconds = 115
+    assert controller.status()["elapsed_seconds"] == 115
