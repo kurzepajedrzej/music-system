@@ -181,11 +181,24 @@ def test_nothing_selected_means_no_group(fake_hub):
     assert music_system.group_members == []
 
 
-async def test_switching_speakers_selects_new_before_deselecting_old(fake_hub):
+async def test_join_adds_speakers_without_dropping_the_playing_one(fake_hub):
+    # HA's join means "add these" in every real multiroom integration (Sonos, Squeezebox, ...).
     fake_hub.state["outputs"] = _live_outputs()  # Biuro selected
     music_system, _ = _make_group(fake_hub)
 
     await music_system.async_join_players(["media_player.music_system_salon"])
+
+    fake_hub.api.async_set_output.assert_awaited_once_with("132116595682064", selected=True)
+
+
+async def test_switching_speakers_is_join_then_unjoin_so_never_zero_outputs(fake_hub):
+    outputs = _live_outputs()  # Biuro selected
+    fake_hub.state["outputs"] = outputs
+    music_system, speakers = _make_group(fake_hub)
+
+    await music_system.async_join_players(["media_player.music_system_salon"])
+    next(o for o in outputs if o["id"] == "132116595682064")["selected"] = True  # OwnTone confirms
+    await speakers["Biuro"].async_unjoin_player()
 
     assert fake_hub.api.async_set_output.await_args_list == [
         call("132116595682064", selected=True),
@@ -202,8 +215,34 @@ async def test_join_from_a_speakers_card_includes_that_speaker(fake_hub):
     assert fake_hub.api.async_set_output.await_args_list == [
         call("132116595682064", selected=True),
         call("194432309644673", selected=True),
-        call("44217615186882", selected=False),
     ]
+
+
+async def test_join_with_only_already_selected_speakers_changes_nothing(fake_hub):
+    fake_hub.state["outputs"] = _live_outputs()  # Biuro selected
+    music_system, _ = _make_group(fake_hub)
+
+    await music_system.async_join_players(["media_player.music_system", "media_player.music_system_biuro"])
+
+    fake_hub.api.async_set_output.assert_not_awaited()
+
+
+def test_group_members_skips_speakers_not_yet_added_to_hass(fake_hub):
+    # async_add_entities writes Music System's state before the speakers have entity_ids.
+    fake_hub.state["outputs"] = _live_outputs()  # Biuro selected
+    music_system, speakers = _make_group(fake_hub)
+    speakers["Biuro"].entity_id = None
+
+    assert music_system.group_members == []
+
+
+def test_group_members_empty_before_music_system_is_added(fake_hub):
+    fake_hub.state["outputs"] = _live_outputs()  # Biuro selected
+    music_system, speakers = _make_group(fake_hub)
+    music_system.entity_id = None
+
+    assert music_system.group_members == []
+    assert speakers["Biuro"].group_members == []
 
 
 async def test_join_rejects_players_from_other_integrations_and_changes_nothing(fake_hub):

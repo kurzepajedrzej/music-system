@@ -229,31 +229,39 @@ class MusicSystemMediaPlayer(MusicSystemEntity, MediaPlayerEntity):
 
     @property
     def group_members(self) -> list[str]:
-        selected = [s.entity_id for s in self._speakers if s.is_selected]
+        # Entities without an entity_id yet (mid async_add_entities) are left out, never reported as None.
+        if self.entity_id is None:
+            return []
+        selected = [s.entity_id for s in self._speakers if s.is_selected and s.entity_id is not None]
         return [self.entity_id, *selected] if selected else []
 
     async def async_join_players(self, group_members: list[str]) -> None:
-        await self.async_set_group(set(group_members) - {self.entity_id})
+        await self.async_add_to_group(set(group_members) - {self.entity_id})
 
     async def async_unjoin_player(self) -> None:
-        await self.async_set_group(set())
+        for speaker in self._speakers:
+            if speaker.is_selected:
+                await self._hub.api.async_set_output(speaker.output["id"], selected=False)
 
-    async def async_set_group(self, wanted: set[str]) -> None:
-        """Make exactly `wanted` (speaker entity_ids) the selected speakers."""
+    async def async_add_to_group(self, requested: set[str]) -> None:
+        """Select the `requested` speakers (entity_ids), leaving already-selected ones alone.
+
+        Join only ever adds, as in every real HA multiroom integration: switching speakers
+        is join-then-unjoin, so OwnTone never passes through zero selected outputs.
+        """
         by_entity_id = {s.entity_id: s for s in self._speakers}
-        unknown = sorted(wanted - by_entity_id.keys())
+        unknown = sorted(requested - by_entity_id.keys())
         if unknown:
             raise ServiceValidationError(
                 f"Can't group {', '.join(unknown)} with Music System -- only its own speakers "
                 f"({', '.join(sorted(by_entity_id))}) can join"
             )
-        changes = [(s, s.entity_id in wanted) for s in self._speakers if (s.entity_id in wanted) != s.is_selected]
-        missing = [s.output_name for s, select in changes if select and s.output is None]
+        to_select = [s for s in self._speakers if s.entity_id in requested and not s.is_selected]
+        missing = [s.output_name for s in to_select if s.output is None]
         if missing:
             raise ServiceValidationError(f"{', '.join(missing)} isn't in OwnTone's current output list")
-        # Selects before deselects: the reverse leaves OwnTone with zero outputs mid-switch.
-        for speaker, select in sorted(changes, key=lambda change: not change[1]):
-            await self._hub.api.async_set_output(speaker.output["id"], selected=select)
+        for speaker in to_select:
+            await self._hub.api.async_set_output(speaker.output["id"], selected=True)
 
 
 class MusicSystemOutputMediaPlayer(MusicSystemEntity, MediaPlayerEntity):
@@ -306,7 +314,7 @@ class MusicSystemOutputMediaPlayer(MusicSystemEntity, MediaPlayerEntity):
 
     async def async_join_players(self, group_members: list[str]) -> None:
         # Joining from a speaker's card: the desired group is that speaker plus the ones named.
-        await self._music_system.async_set_group({self.entity_id, *group_members} - {self._music_system.entity_id})
+        await self._music_system.async_add_to_group({self.entity_id, *group_members} - {self._music_system.entity_id})
 
     async def async_unjoin_player(self) -> None:
         if self.is_selected:

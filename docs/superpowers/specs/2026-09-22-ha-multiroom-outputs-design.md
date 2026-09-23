@@ -153,14 +153,17 @@ Verified against the installed Home Assistant source
   on `music_system` and on each output entity (any of the 4 can act as the
   service-call target, matching how HA's native grouping UI can initiate a
   join from any member's card). Maps each incoming entity_id back to its
-  output via the allowlist lookup, calls `PUT /api/outputs/{id}
-  {"selected": true}` for each, and — since HA's `join` call provides the
-  *full* desired membership, not an incremental add — deselects any
-  currently-selected allowlisted output whose entity_id is *not* in the
-  incoming list.
-  - **Selects before deselects.** Switching Biuro → Salon must select
-    Salon first, then deselect Biuro — the reverse order leaves OwnTone
-    momentarily with zero selected outputs mid-switch, which can stop
+  output via the allowlist lookup and calls `PUT /api/outputs/{id}
+  {"selected": true}` for each one not already selected. **Join only
+  adds** — it never deselects. (Amended after the final review: the
+  `demo` integration treats `join` as the full membership, but every real
+  multiroom integration in HA — Sonos, Squeezebox, LinkPlay, Bluesound —
+  treats it as "add these", and a replacing join would silently drop the
+  speaker that's playing when an automation adds one. Removing a speaker
+  is `unjoin`'s job.)
+  - **Selects before deselects.** Switching Biuro → Salon is join Salon,
+    then unjoin Biuro — so Salon is selected first and OwnTone never
+    passes through zero selected outputs mid-switch, which can stop
     playback.
   - **Rejects entities that aren't this integration's own speakers.** HA's
     join UI can offer any grouping-capable player — including the Sonos's
