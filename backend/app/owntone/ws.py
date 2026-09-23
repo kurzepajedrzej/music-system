@@ -11,6 +11,10 @@ log = logging.getLogger(__name__)
 
 Listener = Callable[[list[str]], None]
 
+# OwnTone pushes nothing until the client asks for the "notify" subprotocol
+# and then subscribes to event types -- these are the ones unified.py reacts to.
+NOTIFY_EVENTS = ["player", "queue", "outputs", "volume"]
+
 
 class OwnToneWS:
     def __init__(
@@ -29,7 +33,7 @@ class OwnToneWS:
 
     @staticmethod
     async def _default_connect(url: str):
-        return await websockets.connect(url)
+        return await websockets.connect(url, subprotocols=["notify"])
 
     def on_notify(self, fn: Listener) -> Callable[[], None]:
         self._listeners.add(fn)
@@ -56,6 +60,7 @@ class OwnToneWS:
         url = await get_ws_url()
         log.info("[owntone-ws] connecting to %s", url)
         self._ws = await self._connect_fn(url)
+        await self._ws.send(json.dumps({"notify": NOTIFY_EVENTS}))
         log.info("[owntone-ws] connected")
 
     async def _run(self) -> None:

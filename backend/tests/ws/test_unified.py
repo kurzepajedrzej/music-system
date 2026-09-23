@@ -220,3 +220,15 @@ def test_state_broadcast_still_goes_out_when_outputs_fetch_fails():
             assert frame["outputs"] == []
     finally:
         unified._clients.clear()
+
+
+def test_volume_notification_triggers_state_broadcast(monkeypatch):
+    # Per-output volume changes arrive as "volume", not "outputs".
+    calls = []
+
+    async def fake_broadcast_state():
+        calls.append("broadcast")
+
+    monkeypatch.setattr(unified, "broadcast_state", fake_broadcast_state)
+    asyncio.run(unified._on_owntone_notify(["volume"]))
+    assert calls == ["broadcast"]

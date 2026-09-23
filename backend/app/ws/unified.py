@@ -90,7 +90,7 @@ async def _tick_loop() -> None:
 
 
 async def _on_owntone_notify(notifications: list[str]) -> None:
-    if {"player", "queue", "outputs"} & set(notifications):
+    if {"player", "queue", "outputs", "volume"} & set(notifications):
         await broadcast_state()
 
 
